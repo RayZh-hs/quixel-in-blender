@@ -49,17 +49,21 @@ def load_assets_in_background(file_path,asset_type):
     results_data = data.get("results", [])
 
     for item in results_data:
-        title = item.get("title", "")
+        asset_name = item.get("title", "")
         uid = item.get("uid", "")
-        asset_name = f"{title}_{uid}"
+        # asset_name = f"{title}_{uid}"
         # img_url = item["thumbnails"][0]["mediaUrl"]
         img_url = next((img["url"] for img in item["thumbnails"][0]["images"] if img["height"] == 180), None)
         # img_name = item["thumbnails"][0]["name"]
-        img_name = os.path.basename(img_url)
-        img_path = os.path.join(thumbnail_dir, img_name)
+        if img_url:
+            img_name = os.path.basename(img_url)
+            img_path = os.path.join(thumbnail_dir, img_name)
+        else:
+            img_name = "unknown.jpg"
+            img_path = None
 
         # Download the image if not already present
-        if not os.path.exists(img_path):
+        if img_path and not os.path.exists(img_path):
             subprocess.check_call(["wget", "-nc", "-P", thumbnail_dir, img_url])
             if asset_type in ('material', 'decal'):
                 print(f"Running {utils_path} inside the virtual environment...")
@@ -67,10 +71,10 @@ def load_assets_in_background(file_path,asset_type):
                 result = subprocess.run(command, capture_output=True, text=True)
 
         # Load the asset into the preview collection
-        if os.path.exists(img_path):
-            pcoll.load(asset_name, img_path, 'IMAGE')
+        if img_path and os.path.exists(img_path):
+            pcoll.load(uid, img_path, 'IMAGE')
             # Add the asset to the queue
-            asset_queue.put((asset_name, pcoll[asset_name]))
+            asset_queue.put((asset_name, uid, img_path, pcoll[uid]))
         else:
             print(f"Image path {img_path} does not exist.")
 
@@ -79,18 +83,21 @@ def load_assets_in_background(file_path,asset_type):
 
 
 def update_ui_from_queue():
+    if FILEBROWSER_PT_assets.assets is None:
+        FILEBROWSER_PT_assets.assets = bpy.utils.previews.new()
+
     while not asset_queue.empty():
         item = asset_queue.get()
-        if item is None:
+
+        if item is None:  # Stop signal
             print("Asset loading complete.")
-            return None  # Stop the timer
+            return None
 
-        asset_name, asset = item
-        if FILEBROWSER_PT_assets.assets is None:
-            FILEBROWSER_PT_assets.assets = bpy.utils.previews.new()
-        FILEBROWSER_PT_assets.assets[asset_name] = asset
+        asset_name, uid, img_path, asset = item  # Ensure the queue holds correct values
 
-    return 0.5  # Check the queue again in 0.2 seconds
+        FILEBROWSER_PT_assets.assets[uid] = {"preview": asset, "img_path": img_path, "asset_name": asset_name}
+
+    return 0.5
 
 
 class FILEBROWSER_PT_assets(bpy.types.Panel):
@@ -119,33 +126,50 @@ class FILEBROWSER_PT_assets(bpy.types.Panel):
             row = layout.row()
             # Calculate the number of columns based on the panel's width
             min_width = 120  # Minimum width for a single column
-            if context.region.width < min_width:
-                columns_count = 1
-            else:
-                columns_count = min(int(context.region.width / min_width), len(self.assets))
+            # if context.region.width < min_width:
+            #     columns_count = 1
+            # else:
+            #     columns_count = min(int(context.region.width / min_width), len(self.assets))
 
+            columns_count = max(1, min(int(context.region.width / min_width), len(self.assets)))
             column_list = [row.column(align=True) for _ in range(columns_count)]
 
-            for i, (asset_name, asset) in enumerate(self.assets.items()):
-                # col = col1 if i % 2 == 0 else col2
+            for i, (uid, asset_data) in enumerate(self.assets.items()):
                 col = column_list[i % columns_count]
                 asset_box = col.box()
                 asset_box.scale_x = 1.0
                 asset_box.scale_y = 1.0
-                asset_box.template_icon(asset.icon_id, scale=5)
-                asset_box.label(text=asset_name.split("_")[0], icon='BLANK1')
-                asset_box.operator("dummy.operator", text="Import")
+
+                preview = asset_data["preview"]
+                img_path = asset_data["img_path"]
+                asset_name = asset_data["asset_name"]
+
+                asset_box.template_icon(preview.icon_id, scale=5)
+                asset_box.label(text=asset_name, icon='BLANK1')
+
+                # Add Import Button
+                import_btn = asset_box.operator("import_asset.import", text="Import")
+                import_btn.asset_name = asset_name
+                import_btn.uid = uid
+                import_btn.img_path = img_path if img_path else "No Image"
 
         row = layout.row()
         row.operator("filebrowser.load_more", text="Load More")
 
 
-class DUMMY_OP_dummy_operator(bpy.types.Operator):
-    bl_idname = "dummy.operator"
-    bl_label = "Import"
+class IMPORT_ASSET_OT_import_asset(bpy.types.Operator):
+    """Import Asset"""
+    bl_idname = "import_asset.import"
+    bl_label = "Import Asset"
+
+    asset_name: bpy.props.StringProperty()
+    uid: bpy.props.StringProperty()
+    img_path: bpy.props.StringProperty()
 
     def execute(self, context):
-        self.report({'INFO'}, "Dummy operator executed")
+        print(f"Importing Asset: {self.asset_name}")
+        print(f"UID: {self.uid}")
+        print(f"Image Path: {self.img_path if self.img_path else 'No Image Available'}")
         return {'FINISHED'}
 
 
@@ -226,7 +250,7 @@ def update_assets(context, cursor):
 def register():
     bpy.utils.register_class(FILEBROWSER_PT_assets)
     bpy.utils.register_class(FILEBROWSER_OT_load_more)
-    bpy.utils.register_class(DUMMY_OP_dummy_operator)
+    bpy.utils.register_class(IMPORT_ASSET_OT_import_asset)
     bpy.utils.register_class(FILEBROWSER_OT_search_assets)
     bpy.utils.register_class(FILEBROWSER_OT_search_assets_modal)
 
@@ -247,19 +271,24 @@ def register():
         update=FILEBROWSER_OT_search_assets.execute  # Update assets when the type changes
     )
 
-    bpy.ops.filebrowser.search_assets_modal()
+    FILEBROWSER_PT_assets.assets = bpy.utils.previews.new()
+    # bpy.ops.filebrowser.search_assets_modal()
     setup_env()
 
 
 def unregister():
     bpy.utils.unregister_class(FILEBROWSER_PT_assets)
     bpy.utils.unregister_class(FILEBROWSER_OT_load_more)
-    bpy.utils.unregister_class(DUMMY_OP_dummy_operator)
+    bpy.utils.unregister_class(IMPORT_ASSET_OT_import_asset)
     bpy.utils.unregister_class(FILEBROWSER_OT_search_assets)
     bpy.utils.unregister_class(FILEBROWSER_OT_search_assets_modal)
 
     del bpy.types.Scene.asset_search
     del bpy.types.Scene.asset_type
+    # Clean up previews to avoid memory leaks
+    if FILEBROWSER_PT_assets.assets:
+        bpy.utils.previews.remove(FILEBROWSER_PT_assets.assets)
+        FILEBROWSER_PT_assets.assets = None
 
 
 if __name__ == "__main__":
