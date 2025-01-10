@@ -7,26 +7,37 @@ import subprocess
 import sys
 import threading
 import time
+from datetime import datetime, timezone
+import zipfile
 
 current_file_path = bpy.context.space_data.text.filepath
 current_file_dir = os.sep.join(current_file_path.split(os.sep)[:-1])
 utils_path = os.path.join(current_file_dir, "utils.py")
+asset_importer_path = os.path.join(current_file_dir, "asset_importer.py")
 
 asset_queue = queue.Queue()
 loading_thread = None
 
 system_python = "/usr/bin/python3"
-data_dir = "/tmp/fab_data"
-thumbnail_dir = os.path.join(data_dir, "thumbnails")
 env_dir = "/tmp/tmp-env"
 python_path = os.path.join(env_dir, "bin", "python")
+blender_path = "/opt/blender_builds/blender-4.2-lts/blender"
 
-if not os.path.exists(data_dir):
-    os.mkdir(data_dir)
-if not os.path.exists(thumbnail_dir):
-    os.mkdir(thumbnail_dir)
+data_dir = "/tmp/fab_data"
+thumbnail_dir = os.path.join(data_dir, "thumbnails")
+assets_dir = os.path.join(data_dir, "assets")
+unzipped_assets_dir = os.path.join(assets_dir, "unzipped_assets")
+blender_files_dir = os.path.join(assets_dir, "blender_files")
+catalog_file = os.path.join(assets_dir, "blender_assets.cats.txt")
+
+os.makedirs(data_dir, exist_ok=True)
+os.makedirs(thumbnail_dir, exist_ok=True)
+os.makedirs(assets_dir, exist_ok=True)
+os.makedirs(unzipped_assets_dir, exist_ok=True)
+os.makedirs(blender_files_dir, exist_ok=True)
 
 cursors = {"curr_cursor" : "0", "next_cursor" : "0"}
+
 
 def setup_env():
     if not os.path.exists(env_dir):
@@ -69,6 +80,7 @@ def load_assets_in_background(file_path,asset_type):
                 print(f"Running {utils_path} inside the virtual environment...")
                 command = [python_path, utils_path, "--function", "crop_thumbnails", img_path,]
                 result = subprocess.run(command, capture_output=True, text=True)
+                print(result)
 
         # Load the asset into the preview collection
         if img_path and os.path.exists(img_path):
@@ -170,6 +182,66 @@ class IMPORT_ASSET_OT_import_asset(bpy.types.Operator):
         print(f"Importing Asset: {self.asset_name}")
         print(f"UID: {self.uid}")
         print(f"Image Path: {self.img_path if self.img_path else 'No Image Available'}")
+
+        asset_formats_file = os.path.join(data_dir, f"output_{self.uid}.json")
+
+        if not os.path.exists(asset_formats_file):
+            url = f"https://www.fab.com/i/listings/{self.uid}/asset-formats"
+            referer = "https://www.fab.com/sellers/Quixel"
+
+            print(f"Running {utils_path} inside the virtual environment...")
+            command = [python_path, utils_path, "--function", "fetch_asset_formats", url, referer, self.uid ]
+            result = subprocess.run(command, capture_output=True, text=True)
+            print(result)
+
+        with open(asset_formats_file, "r") as f:
+            data = json.load(f)
+        asset_name = None
+        asset_uid = None
+        for asset in data:
+            if asset["assetFormatType"]["code"] == "gltf":
+                asset_name = asset["files"][-1]["name"]
+                asset_uid = asset["files"][-1]["uid"]  # Get UID of last file
+        print("Last UID for gltf:", asset_uid)
+
+        asset_path = os.path.join(assets_dir, asset_name)
+
+        if not os.path.exists(asset_path):
+            down_link_file = os.path.join(data_dir, f"output_{asset_uid}.json")
+            link_expired = True
+
+            if os.path.exists(down_link_file):
+                with open(down_link_file, "r") as f:
+                    data = json.load(f)
+                expires_dt = datetime.fromisoformat(data["downloadInfo"][0]["expires"].rstrip("Z")).replace(tzinfo=timezone.utc)
+                link_expired = datetime.now(timezone.utc) > expires_dt
+
+            if link_expired:
+                url = f"https://www.fab.com/i/listings/{self.uid}/asset-formats/gltf/files/{asset_uid}/download-info/binary"
+                referer = f"https://www.fab.com/i/listings/{self.uid}"
+
+                print(f"Running {utils_path} inside the virtual environment...")
+                command = [python_path, utils_path, "--function", "fetch_down_link", url, referer, asset_uid]
+                result = subprocess.run(command, capture_output=True, text=True)
+                print(result)
+
+            # if os.path.exists(down_link_file):
+            with open(down_link_file, "r") as f:
+                data = json.load(f)
+                # asset_path =  os.path.join(assets_dir, asset_name)
+                down_link = data["downloadInfo"][0]["downloadUrl"]
+                # if not os.path.exists(asset_path):
+            subprocess.check_call(["wget", "-P", assets_dir, "-O", asset_path, down_link])
+
+                # process_assets(asset_name, asset_path, self.img_path)
+
+        subprocess.run(
+            [blender_path, "-b", "--factory-startup", "-P", asset_importer_path, "--", assets_dir, asset_name, asset_path, self.img_path],
+            check=True,
+        )
+
+        bpy.ops.asset.library_refresh()
+        self.report({'INFO'}, "Asset Imported")
         return {'FINISHED'}
 
 
@@ -230,8 +302,9 @@ def update_assets(context, cursor):
         referer = "https://www.fab.com/sellers/Quixel"
 
         print(f"Running {utils_path} inside the virtual environment...")
-        command = [python_path, utils_path, "--function", "fetch_asset_details", url, referer, asset_type, query, cursor,]
+        command = [python_path, utils_path, "--function", "fetch_assets", url, referer, asset_type, query, cursor,]
         result = subprocess.run(command, capture_output=True, text=True)
+        print(result)
 
     # Stop any existing thread
     if loading_thread and loading_thread.is_alive():

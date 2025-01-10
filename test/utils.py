@@ -9,6 +9,30 @@ from PIL import Image
 
 payload = ""
 
+headers = {
+    "User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:133.0) Gecko/20100101 Firefox/133.0",
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "en",
+    "Accept-Encoding": "gzip, deflate, br, zstd",
+    "X-Requested-With": "XMLHttpRequest",
+    "DNT": "1",
+    "Alt-Used": "www.fab.com",
+    "Connection": "keep-alive",
+    "Sec-Fetch-Dest": "empty",
+    "Sec-Fetch-Mode": "cors",
+    "Sec-Fetch-Site": "same-origin",
+    "Sec-GPC": "1"
+}
+
+querystring = {
+    "asset_formats": ["gltf"],
+    "currency": "USD",
+    "is_ai_generated": "0",
+    "is_free": "1",
+    "seller": "Quixel",
+    "sort_by": "listingTypeWeight"
+}
+
 data_dir = "/tmp/fab_data"
 
 if not os.path.exists(data_dir):
@@ -16,7 +40,6 @@ if not os.path.exists(data_dir):
 
 
 def crop_thumbnails(image_path):
-    print("HERE!!!!!!!!!!!!!!!!!!!")
     if image_path:
         image = Image.open(f"{image_path}")
         # Get the original dimensions
@@ -31,44 +54,42 @@ def crop_thumbnails(image_path):
         cropped_image.save(f"{image_path}")
 
 
-def fetch_asset_details(url, referer, asset_type=None, query=None, cursor=None):
-    headers = {
-        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:133.0) Gecko/20100101 Firefox/133.0",
-        "Accept": "application/json, text/plain, */*",
-        "Accept-Language": "en",
-        "Accept-Encoding": "gzip, deflate, br, zstd",
-        "Referer": referer,
-        "X-Requested-With": "XMLHttpRequest",
-        "DNT": "1",
-        "Alt-Used": "www.fab.com",
-        "Connection": "keep-alive",
-        "Sec-Fetch-Dest": "empty",
-        "Sec-Fetch-Mode": "cors",
-        "Sec-Fetch-Site": "same-origin",
-        "Sec-GPC": "1"
-    }
-
-    querystring = {
-        "asset_formats": ["gltf"],
-        "currency": "USD",
-        "is_ai_generated": "0",
-        "is_free": "1",
-        "seller": "Quixel",
-        "sort_by": "listingTypeWeight",
-        "cursor": cursor,
-        "listing_types": asset_type,
-        "q": query
-    }
+def fetch_assets(url, referer, asset_type=None, query=None, cursor=None):
+    headers["Referer"] = referer
+    querystring["cursor"] = cursor
+    querystring["listing_types"] = asset_type
+    querystring["q"] = query
 
     file_path = os.path.join(data_dir, f"output_{asset_type}_{query}_{cursor}.json")
 
+    fetcher(url, headers, file_path, query=querystring)
+
+
+def fetch_asset_formats(url, referer, asset_uid=None):
+    headers["Referer"] = referer
+    file_path = os.path.join(data_dir, f"output_{asset_uid}.json")
+
+    fetcher(url, headers, file_path)
+
+
+def fetch_down_link(url, referer, asset_uid=None):
+    headers["Referer"] = referer
+    file_path = os.path.join(data_dir, f"output_{asset_uid}.json")
+
+    fetcher(url, headers, file_path)
+
+
+def fetcher(url, header, file_path, query=None):
     max_retries = 5  # Number of retries
     retry_delay = 2  # Delay in seconds between retries
 
     for attempt in range(1, max_retries + 1):
         try:
             # Make the GET request
-            response = requests.get(url, data=payload, headers=headers, params=querystring)
+            if query:
+                response = requests.get(url, headers=header, params=query)
+            else:
+                response = requests.get(url, headers=header)
 
             if response.status_code == 200:
                 # Success: Process the response
@@ -110,8 +131,12 @@ def fetch_asset_details(url, referer, asset_type=None, query=None, cursor=None):
 def main(function_name, *args):
     if function_name == "crop_thumbnails":
         crop_thumbnails(*args)
-    elif function_name == "fetch_asset_details":
-        fetch_asset_details(*args)
+    elif function_name == "fetch_assets":
+        fetch_assets(*args)
+    elif function_name == "fetch_asset_formats":
+        fetch_asset_formats(*args)
+    elif function_name == "fetch_down_link":
+        fetch_down_link(*args)
     else:
         print("Function not found")
 
