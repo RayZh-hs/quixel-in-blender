@@ -36,6 +36,10 @@ os.makedirs(assets_dir, exist_ok=True)
 os.makedirs(unzipped_assets_dir, exist_ok=True)
 os.makedirs(blender_files_dir, exist_ok=True)
 
+asset_library_paths = [library.path for library in bpy.context.preferences.filepaths.asset_libraries]
+if assets_dir not in asset_library_paths:
+    bpy.ops.preferences.asset_library_add(directory=assets_dir)
+
 cursors = {"curr_cursor" : "0", "next_cursor" : "0"}
 
 
@@ -123,7 +127,7 @@ class FILEBROWSER_PT_assets(bpy.types.Panel):
     bl_idname = "FILEBROWSER_PT_assets"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
-    bl_category = 'Fab'
+    bl_category = 'Quixel'
 
     assets = None
 
