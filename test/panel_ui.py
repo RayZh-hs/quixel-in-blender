@@ -113,11 +113,17 @@ def update_ui_from_queue():
 
 
 class FILEBROWSER_PT_assets(bpy.types.Panel):
-    bl_space_type = "FILE_BROWSER"
-    bl_region_type = "TOOL_PROPS"
-    bl_context = "ASSET_BROWSER"
-    bl_label = "Assets"
+    # bl_space_type = "FILE_BROWSER"
+    # bl_region_type = "TOOL_PROPS"
+    # bl_context = "ASSET_BROWSER"
+    # bl_label = "Assets"
+    # bl_idname = "FILEBROWSER_PT_assets"
+
+    bl_label = "Quixel Assets"
     bl_idname = "FILEBROWSER_PT_assets"
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_category = 'Fab'
 
     assets = None
 
@@ -231,16 +237,19 @@ class IMPORT_ASSET_OT_import_asset(bpy.types.Operator):
                 # asset_path =  os.path.join(assets_dir, asset_name)
                 down_link = data["downloadInfo"][0]["downloadUrl"]
                 # if not os.path.exists(asset_path):
-            subprocess.check_call(["wget", "-P", assets_dir, "-O", asset_path, down_link])
-
-                # process_assets(asset_name, asset_path, self.img_path)
+            # subprocess.check_call(["wget", "-P", assets_dir, "-O", asset_path, down_link])
+            subprocess.check_call(["aria2c", "--dir", assets_dir, "--out", asset_name, down_link])
 
         subprocess.run(
             [blender_path, "-b", "--factory-startup", "-P", asset_importer_path, "--", assets_dir, asset_name, asset_path, self.img_path],
             check=True,
         )
 
-        bpy.ops.asset.library_refresh()
+        for area in bpy.context.screen.areas:
+            if area.type == 'FILE_BROWSER':
+                with bpy.context.temp_override(area=area):
+                    bpy.ops.asset.library_refresh()
+                break
         self.report({'INFO'}, "Asset Imported")
         return {'FINISHED'}
 
