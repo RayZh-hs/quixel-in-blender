@@ -50,7 +50,35 @@ def find_json_file(folder_path, search_term):
     return None
 
 
-def import_gltf_and_process(gltf_path, asset_name, blend_file_path, catalog_id=None, preview_image_path=None, catalog_file=None):
+def get_asset_categories(json_path):
+    """Reads the JSON file and extracts the asset categories."""
+    try:
+        with open(json_path, 'r') as file:
+            data = json.load(file)
+        categories = data.get("categories")
+        if categories:
+            return str('-'.join(categories))
+        return "unknown"
+    except (json.JSONDecodeError, FileNotFoundError) as e:
+        print(f"Error reading JSON file {json_path}: {e}")
+        return "invalid"
+
+
+def get_asset_tags(json_path):
+    """Reads the JSON file and extracts the asset tags."""
+    try:
+        with open(json_path, 'r') as file:
+            data = json.load(file)
+        tags = data.get("tags")
+        if tags:
+            return tags
+        return None
+    except (json.JSONDecodeError, FileNotFoundError) as e:
+        print(f"Error reading JSON file {json_path}: {e}")
+        return None
+
+
+def import_gltf_and_process(gltf_path, asset_name, blend_file_path, category=None, tags=None, preview_image_path=None, catalog_file=None):
     """Imports a GLTF file, organizes objects, marks assets, and saves as a blend file."""
     try:
         # Clear the existing scene
@@ -73,28 +101,49 @@ def import_gltf_and_process(gltf_path, asset_name, blend_file_path, catalog_id=N
             bpy.context.view_layer.objects.active = obj
             bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
 
-        # Read the catalog file to gather existing IDs
-        existing_catalog_ids = {}
+        # # Read the catalog file to gather existing IDs
+        # existing_catalog_ids = {}
+        # if os.path.exists(catalog_file):
+        #     with open(catalog_file, 'r') as cf:
+        #         for line in cf:
+        #             if ':' in line:
+        #                 existing_uuid = line.split(':')[0].strip()
+        #                 existing_id = line.split(':')[-1].strip()
+        #                 existing_catalog_ids[existing_id] = existing_uuid
+        #
+        # # If catalog_id is not in the catalog file, append it
+        # if catalog_id not in existing_catalog_ids.keys():
+        #     catalog_uuid = str(uuid.uuid4())
+        #     with open(catalog_file, 'a') as cf:
+        #         cf.write(f"{catalog_uuid}:{catalog_id}:{catalog_id}\n")
+        #         print(f"Added new catalog ID: {catalog_id} to {catalog_file}")
+        #     assigned_catalog_uuid = catalog_uuid
+        # else:
+        #     assigned_catalog_uuid = existing_catalog_ids[catalog_id]
+
+        # Read the catalog file to gather existing categories
+        existing_categories = {}
         if os.path.exists(catalog_file):
             with open(catalog_file, 'r') as cf:
                 for line in cf:
                     if ':' in line:
                         existing_uuid = line.split(':')[0].strip()
-                        existing_id = line.split(':')[-1].strip()
-                        existing_catalog_ids[existing_id] = existing_uuid
+                        existing_category = line.split(':')[-1].strip()
+                        existing_categories[existing_category] = existing_uuid
 
-        # If catalog_id is not in the catalog file, append it
-        if catalog_id not in existing_catalog_ids.keys():
+        # If categories is not in the catalog file, append it
+        if category not in existing_categories.keys():
             catalog_uuid = str(uuid.uuid4())
+            category_path = category.replace("-","/")
             with open(catalog_file, 'a') as cf:
-                cf.write(f"{catalog_uuid}:{catalog_id}:{catalog_id}\n")
-                print(f"Added new catalog ID: {catalog_id} to {catalog_file}")
+                cf.write(f"{catalog_uuid}:{category_path}:{category}\n")
+                print(f"Added new catalog ID: {category} to {catalog_file}")
             assigned_catalog_uuid = catalog_uuid
         else:
-            assigned_catalog_uuid = existing_catalog_ids[catalog_id]
+            assigned_catalog_uuid = existing_categories[category]
 
         # Handle marking assets and setting thumbnails for "surface"
-        if catalog_id == "surface":
+        if "surface" in category:
             for obj in new_collection.objects:
                 if obj.type == 'MESH' and ("_LOD" not in obj.name or "_LOD0" in obj.name):
                     for material_slot in obj.material_slots:
@@ -107,6 +156,10 @@ def import_gltf_and_process(gltf_path, asset_name, blend_file_path, catalog_id=N
                             material.asset_mark()
                             material.asset_data.catalog_id = assigned_catalog_uuid
                             print(f"Marked material '{material.name}' as asset with catalog ID {assigned_catalog_uuid}")
+
+                            if tags:
+                                for tag_name in tags:
+                                    material.asset_data.tags.new(tag_name, skip_if_exists=True)
 
                             # Set custom preview image for material
                             if preview_image_path and os.path.exists(preview_image_path):
@@ -130,6 +183,10 @@ def import_gltf_and_process(gltf_path, asset_name, blend_file_path, catalog_id=N
                 obj.asset_mark()
                 obj.asset_data.catalog_id = assigned_catalog_uuid
                 print(f"Marked object '{obj.name}' as asset with catalog ID {assigned_catalog_uuid}")
+
+                if tags:
+                    for tag_name in tags:
+                        obj.asset_data.tags.new(tag_name, skip_if_exists=True)
 
                 # Set custom preview image for the object
                 if preview_image_path and os.path.exists(preview_image_path):
@@ -180,7 +237,9 @@ def process_assets(base_path, asset_name, asset_path, preview_img):
             print(f"No JSON file found for {asset_name}. Skipping.")
             return
 
-        asset_type = get_asset_type(json_file)
+        # asset_type = get_asset_type(json_file)
+        category = get_asset_categories(json_file)
+        tags = get_asset_tags(json_file)
         for gltf_file_name in os.listdir(extract_path):
             if gltf_file_name.endswith(".gltf"):
                 gltf_path = os.path.join(extract_path, gltf_file_name)
@@ -193,7 +252,7 @@ def process_assets(base_path, asset_name, asset_path, preview_img):
                 #     crop_thumbnails(preview_image_path)
 
                 import_gltf_and_process(
-                    gltf_path, asset_name, blend_file_path, catalog_id=asset_type, preview_image_path=preview_img, catalog_file=catalog_file
+                    gltf_path, asset_name, blend_file_path, category=category, tags=tags, preview_image_path=preview_img, catalog_file=catalog_file
                 )
 
 
