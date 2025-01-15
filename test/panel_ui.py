@@ -79,7 +79,8 @@ def load_assets_in_background(file_path,asset_type):
 
         # Download the image if not already present
         if img_path and not os.path.exists(img_path):
-            subprocess.check_call(["wget", "-nc", "-P", thumbnail_dir, img_url])
+            # subprocess.check_call(["wget", "-nc", "-P", thumbnail_dir, img_url])
+            subprocess.check_call(["curl", "-o", img_path, img_url])
             if asset_type in ('material', 'decal'):
                 print(f"Running {utils_path} inside the virtual environment...")
                 command = [python_path, utils_path, "--function", "crop_thumbnails", img_path,]
@@ -242,7 +243,9 @@ class IMPORT_ASSET_OT_import_asset(bpy.types.Operator):
                 down_link = data["downloadInfo"][0]["downloadUrl"]
                 # if not os.path.exists(asset_path):
             # subprocess.check_call(["wget", "-P", assets_dir, "-O", asset_path, down_link])
-            subprocess.check_call(["aria2c", "--dir", assets_dir, "--out", asset_name, down_link])
+            # subprocess.check_call(["aria2c", "--dir", assets_dir, "--out", asset_name, down_link])
+            subprocess.check_call(["curl", "-o", asset_path, down_link])
+
 
         subprocess.run(
             [blender_path, "-b", "--factory-startup", "-P", asset_importer_path, "--", assets_dir, asset_name, asset_path, self.img_path],
