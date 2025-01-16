@@ -118,12 +118,6 @@ def update_ui_from_queue():
 
 
 class FILEBROWSER_PT_assets(bpy.types.Panel):
-    # bl_space_type = "FILE_BROWSER"
-    # bl_region_type = "TOOL_PROPS"
-    # bl_context = "ASSET_BROWSER"
-    # bl_label = "Assets"
-    # bl_idname = "FILEBROWSER_PT_assets"
-
     bl_label = "Quixel Assets"
     bl_idname = "FILEBROWSER_PT_assets"
     bl_space_type = 'VIEW_3D'
@@ -136,14 +130,25 @@ class FILEBROWSER_PT_assets(bpy.types.Panel):
         layout = self.layout
         layout.alignment = "CENTER"
 
-        # Combo box for selecting asset type
-        row = layout.row()
-        row.prop(context.scene, "asset_type", text="")
+        # # Combo box for selecting asset type
+        # row = layout.row()
+        # row.prop(context.scene, "asset_type", text="")
+
+        # Three buttons for asset type
+        row = layout.row(align=True)
+        row.operator("filebrowser.set_asset_type", text="3D Model", depress=context.scene.asset_type == '3D_MODEL').asset_type = '3D_MODEL'
+        row.operator("filebrowser.set_asset_type", text="Material", depress=context.scene.asset_type == 'MATERIAL').asset_type = 'MATERIAL'
+        row.operator("filebrowser.set_asset_type", text="Decal", depress=context.scene.asset_type == 'DECAL').asset_type = 'DECAL'
 
         # Search box and search button
         row = layout.row()
         row.prop(context.scene, "asset_search", text="")
         row.operator("filebrowser.search_assets", text="", icon='VIEWZOOM')
+
+        # Add checkboxes for Import Asset and Create Asset
+        row = layout.row()
+        row.prop(context.scene, "import_asset")
+        row.prop(context.scene, "create_asset")
 
         if self.assets:
             row = layout.row()
@@ -300,6 +305,18 @@ class FILEBROWSER_OT_load_more(bpy.types.Operator):
         return {'FINISHED'}
 
 
+class FILEBROWSER_OT_set_asset_type(bpy.types.Operator):
+    bl_idname = "filebrowser.set_asset_type"
+    bl_label = "Set Asset Type"
+
+    asset_type: bpy.props.StringProperty()
+
+    def execute(self, context):
+        context.scene.asset_type = self.asset_type
+        bpy.ops.filebrowser.search_assets()
+        return {'FINISHED'}
+
+
 def update_assets(context, cursor):
     global loading_thread
 
@@ -342,6 +359,7 @@ def register():
     bpy.utils.register_class(IMPORT_ASSET_OT_import_asset)
     bpy.utils.register_class(FILEBROWSER_OT_search_assets)
     bpy.utils.register_class(FILEBROWSER_OT_search_assets_modal)
+    bpy.utils.register_class(FILEBROWSER_OT_set_asset_type)
 
     # bpy.types.Scene.asset_search = bpy.props.StringProperty(name="Search Assets")
     bpy.types.Scene.asset_search = bpy.props.StringProperty(
@@ -349,15 +367,32 @@ def register():
         update=FILEBROWSER_OT_search_assets.execute
     )
 
-    bpy.types.Scene.asset_type = bpy.props.EnumProperty(
+    bpy.types.Scene.asset_type = bpy.props.StringProperty(
         name="Asset Type",
-        description="Type of asset",
-        items=[
-            ('3D_MODEL', "3d-model", ""),
-            ('MATERIAL', "material", ""),
-            ('DECAL', "decal", "")
-        ],
-        update=FILEBROWSER_OT_search_assets.execute  # Update assets when the type changes
+        default='MATERIAL'
+    )
+
+    # bpy.types.Scene.asset_type = bpy.props.EnumProperty(
+    #     name="Asset Type",
+    #     description="Type of asset",
+    #     items=[
+    #         ('3D_MODEL', "3d-model", ""),
+    #         ('MATERIAL', "material", ""),
+    #         ('DECAL', "decal", "")
+    #     ],
+    #     update=FILEBROWSER_OT_search_assets.execute  # Update assets when the type changes
+    # )
+
+    bpy.types.Scene.import_asset = bpy.props.BoolProperty(
+        name="Import Asset",
+        description="Enable asset import",
+        default=False
+    )
+
+    bpy.types.Scene.create_asset = bpy.props.BoolProperty(
+        name="Create Asset",
+        description="Enable asset creation",
+        default=False
     )
 
     FILEBROWSER_PT_assets.assets = bpy.utils.previews.new()
@@ -371,9 +406,13 @@ def unregister():
     bpy.utils.unregister_class(IMPORT_ASSET_OT_import_asset)
     bpy.utils.unregister_class(FILEBROWSER_OT_search_assets)
     bpy.utils.unregister_class(FILEBROWSER_OT_search_assets_modal)
+    bpy.utils.unregister_class(FILEBROWSER_OT_set_asset_type)
 
     del bpy.types.Scene.asset_search
     del bpy.types.Scene.asset_type
+    del bpy.types.Scene.import_asset
+    del bpy.types.Scene.create_asset
+
     # Clean up previews to avoid memory leaks
     if FILEBROWSER_PT_assets.assets:
         bpy.utils.previews.remove(FILEBROWSER_PT_assets.assets)
