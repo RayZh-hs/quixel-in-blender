@@ -40,12 +40,47 @@ if assets_dir not in asset_library_paths:
 cursors = {"curr_cursor" : "0", "next_cursor" : "0"}
 
 
+
 def setup_env():
     if not os.path.exists(env_dir):
         print(f"Creating virtual environment at {env_dir}")
         subprocess.check_call([system_python, "-m", "venv", env_dir])
         subprocess.check_call([python_path, "-m", "pip", "install", "--upgrade", "pip"])
         subprocess.check_call([python_path, "-m", "pip", "install", "requests", "zstandard", "pillow"])
+
+
+def update_assets(context, cursor):
+    global loading_thread
+
+    asset_type = str(context.scene.asset_type).strip()
+    print(asset_type)
+    query = context.scene.asset_search.strip()
+    # cursor = cursors["curr_cursor"].strip()
+    file_path = os.path.join(data_dir, f"output_{asset_type}_{query}_{cursor}.json")
+
+    if not os.path.exists(file_path):
+        url = "https://www.fab.com/i/listings/search"
+        referer = "https://www.fab.com/sellers/Quixel"
+
+        print(f"Running {utils_path} inside the virtual environment...")
+        command = [python_path, utils_path, "--function", "fetch_assets", url, referer, asset_type, query, cursor,]
+        # result = subprocess.run(command, capture_output=True, text=True)
+        # print(result)
+        process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        print(process.communicate())
+
+    # Stop any existing thread
+    if loading_thread and loading_thread.is_alive():
+        print("Stopping existing loading thread...")
+        loading_thread.join()
+
+    # Clear old assets and start a new thread
+    # FILEBROWSER_PT_assets.assets = None
+    loading_thread = threading.Thread(target=load_assets_in_background, args=(file_path,asset_type,))
+    loading_thread.start()
+
+    # Start UI timer to process the queue
+    bpy.app.timers.register(update_ui_from_queue)
 
 
 def load_assets_in_background(file_path,asset_type):
@@ -128,9 +163,9 @@ class FILEBROWSER_PT_assets(bpy.types.Panel):
 
         # Three buttons for asset type
         row = layout.row(align=True)
-        row.operator("filebrowser.set_asset_type", text="3D Model", depress=context.scene.asset_type == '3D_MODEL').asset_type = '3D_MODEL'
-        row.operator("filebrowser.set_asset_type", text="Material", depress=context.scene.asset_type == 'MATERIAL').asset_type = 'MATERIAL'
-        row.operator("filebrowser.set_asset_type", text="Decal", depress=context.scene.asset_type == 'DECAL').asset_type = 'DECAL'
+        row.operator("filebrowser.set_asset_type", text="3D Model", depress=context.scene.asset_type == '3d-model').asset_type = '3d-model'
+        row.operator("filebrowser.set_asset_type", text="Material", depress=context.scene.asset_type == 'material').asset_type = 'material'
+        row.operator("filebrowser.set_asset_type", text="Decal", depress=context.scene.asset_type == 'decal').asset_type = 'decal'
 
         # Search box and search button
         row = layout.row()
@@ -302,44 +337,6 @@ class FILEBROWSER_OT_set_asset_type(bpy.types.Operator):
         return {'FINISHED'}
 
 
-def update_assets(context, cursor):
-    global loading_thread
-
-    asset_type_mapping = {
-        '3D_MODEL': "3d-model",
-        'MATERIAL': "material",
-        'DECAL': "decal"
-    }
-    asset_type = str(asset_type_mapping.get(context.scene.asset_type, "material")).strip()
-    query = context.scene.asset_search.strip()
-    # cursor = cursors["curr_cursor"].strip()
-    file_path = os.path.join(data_dir, f"output_{asset_type}_{query}_{cursor}.json")
-
-    if not os.path.exists(file_path):
-        url = "https://www.fab.com/i/listings/search"
-        referer = "https://www.fab.com/sellers/Quixel"
-
-        print(f"Running {utils_path} inside the virtual environment...")
-        command = [python_path, utils_path, "--function", "fetch_assets", url, referer, asset_type, query, cursor,]
-        # result = subprocess.run(command, capture_output=True, text=True)
-        # print(result)
-        process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        print(process.communicate())
-
-    # Stop any existing thread
-    if loading_thread and loading_thread.is_alive():
-        print("Stopping existing loading thread...")
-        loading_thread.join()
-
-    # Clear old assets and start a new thread
-    # FILEBROWSER_PT_assets.assets = None
-    loading_thread = threading.Thread(target=load_assets_in_background, args=(file_path,asset_type,))
-    loading_thread.start()
-
-    # Start UI timer to process the queue
-    bpy.app.timers.register(update_ui_from_queue)
-
-
 def register():
     bpy.utils.register_class(FILEBROWSER_PT_assets)
     bpy.utils.register_class(FILEBROWSER_OT_load_more)
@@ -356,7 +353,7 @@ def register():
 
     bpy.types.Scene.asset_type = bpy.props.StringProperty(
         name="Asset Type",
-        default='MATERIAL'
+        default='3d-model'
     )
 
     bpy.types.Scene.import_asset = bpy.props.BoolProperty(
