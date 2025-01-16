@@ -4,11 +4,8 @@ import json
 import os
 import queue
 import subprocess
-import sys
 import threading
-import time
 from datetime import datetime, timezone
-import zipfile
 
 current_file_path = bpy.context.space_data.text.filepath
 current_file_dir = os.sep.join(current_file_path.split(os.sep)[:-1])
@@ -58,7 +55,6 @@ def load_assets_in_background(file_path,asset_type):
         data = json.load(f)
 
     cursor_data = data.get("cursors", {})
-    # cursors["prev_cursor"] = cursor_data.get("previous")
     cursors["next_cursor"] = cursor_data.get("next")
 
     results_data = data.get("results", [])
@@ -66,7 +62,6 @@ def load_assets_in_background(file_path,asset_type):
     for item in results_data:
         asset_name = item.get("title", "")
         uid = item.get("uid", "")
-        # asset_name = f"{title}_{uid}"
         # img_url = item["thumbnails"][0]["mediaUrl"]
         img_url = next((img["url"] for img in item["thumbnails"][0]["images"] if img["height"] == 180), None)
         # img_name = item["thumbnails"][0]["name"]
@@ -79,13 +74,14 @@ def load_assets_in_background(file_path,asset_type):
 
         # Download the image if not already present
         if img_path and not os.path.exists(img_path):
-            # subprocess.check_call(["wget", "-nc", "-P", thumbnail_dir, img_url])
             subprocess.check_call(["curl", "-o", img_path, img_url])
             if asset_type in ('material', 'decal'):
                 print(f"Running {utils_path} inside the virtual environment...")
                 command = [python_path, utils_path, "--function", "crop_thumbnails", img_path,]
-                result = subprocess.run(command, capture_output=True, text=True)
-                print(result)
+                # result = subprocess.run(command, capture_output=True, text=True)
+                # print(result)
+                process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                print(process.communicate())
 
         # Load the asset into the preview collection
         if img_path and os.path.exists(img_path):
@@ -130,10 +126,6 @@ class FILEBROWSER_PT_assets(bpy.types.Panel):
         layout = self.layout
         layout.alignment = "CENTER"
 
-        # # Combo box for selecting asset type
-        # row = layout.row()
-        # row.prop(context.scene, "asset_type", text="")
-
         # Three buttons for asset type
         row = layout.row(align=True)
         row.operator("filebrowser.set_asset_type", text="3D Model", depress=context.scene.asset_type == '3D_MODEL').asset_type = '3D_MODEL'
@@ -154,11 +146,6 @@ class FILEBROWSER_PT_assets(bpy.types.Panel):
             row = layout.row()
             # Calculate the number of columns based on the panel's width
             min_width = 120  # Minimum width for a single column
-            # if context.region.width < min_width:
-            #     columns_count = 1
-            # else:
-            #     columns_count = min(int(context.region.width / min_width), len(self.assets))
-
             columns_count = max(1, min(int(context.region.width / min_width), len(self.assets)))
             column_list = [row.column(align=True) for _ in range(columns_count)]
 
@@ -207,8 +194,10 @@ class IMPORT_ASSET_OT_import_asset(bpy.types.Operator):
 
             print(f"Running {utils_path} inside the virtual environment...")
             command = [python_path, utils_path, "--function", "fetch_asset_formats", url, referer, self.uid ]
-            result = subprocess.run(command, capture_output=True, text=True)
-            print(result)
+            # result = subprocess.run(command, capture_output=True, text=True)
+            # print(result)
+            process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            print(process.communicate())
 
         with open(asset_formats_file, "r") as f:
             data = json.load(f)
@@ -238,19 +227,15 @@ class IMPORT_ASSET_OT_import_asset(bpy.types.Operator):
 
                 print(f"Running {utils_path} inside the virtual environment...")
                 command = [python_path, utils_path, "--function", "fetch_down_link", url, referer, asset_uid]
-                result = subprocess.run(command, capture_output=True, text=True)
-                print(result)
+                # result = subprocess.run(command, capture_output=True, text=True)
+                # print(result)
+                process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                print(process.communicate())
 
-            # if os.path.exists(down_link_file):
             with open(down_link_file, "r") as f:
                 data = json.load(f)
-                # asset_path =  os.path.join(assets_dir, asset_name)
                 down_link = data["downloadInfo"][0]["downloadUrl"]
-                # if not os.path.exists(asset_path):
-            # subprocess.check_call(["wget", "-P", assets_dir, "-O", asset_path, down_link])
-            # subprocess.check_call(["aria2c", "--dir", assets_dir, "--out", asset_name, down_link])
             subprocess.check_call(["curl", "-o", asset_path, down_link])
-
 
         subprocess.run(
             [blender_path, "-b", "--factory-startup", "-P", asset_importer_path, "--", assets_dir, asset_name, asset_path, self.img_path],
@@ -336,8 +321,10 @@ def update_assets(context, cursor):
 
         print(f"Running {utils_path} inside the virtual environment...")
         command = [python_path, utils_path, "--function", "fetch_assets", url, referer, asset_type, query, cursor,]
-        result = subprocess.run(command, capture_output=True, text=True)
-        print(result)
+        # result = subprocess.run(command, capture_output=True, text=True)
+        # print(result)
+        process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        print(process.communicate())
 
     # Stop any existing thread
     if loading_thread and loading_thread.is_alive():
@@ -371,17 +358,6 @@ def register():
         name="Asset Type",
         default='MATERIAL'
     )
-
-    # bpy.types.Scene.asset_type = bpy.props.EnumProperty(
-    #     name="Asset Type",
-    #     description="Type of asset",
-    #     items=[
-    #         ('3D_MODEL', "3d-model", ""),
-    #         ('MATERIAL', "material", ""),
-    #         ('DECAL', "decal", "")
-    #     ],
-    #     update=FILEBROWSER_OT_search_assets.execute  # Update assets when the type changes
-    # )
 
     bpy.types.Scene.import_asset = bpy.props.BoolProperty(
         name="Import Asset",
