@@ -172,26 +172,44 @@ def import_to_scene(asset_name, asset_path, asset_type):
                     bpy.ops.import_scene.fbx(filepath=fbx_path)
                     print(f"Imported FBX: {fbx_path}")
 
+                    ass_name = os.path.splitext(os.path.basename(asset_name))[0]
+
                     # Create a collection for the asset
-                    new_collection = bpy.data.collections.new(asset_name)
+                    new_collection = bpy.data.collections.new(os.path.splitext(os.path.basename(ass_name))[0])
                     bpy.context.scene.collection.children.link(new_collection)
+
+                    # Create a new empty object
+                    new_empty = bpy.data.objects.new(ass_name, None)
+                    new_collection.objects.link(new_empty)
+
+                    bpy.ops.object.parent_clear(type='CLEAR_KEEP_TRANSFORM')
 
                     # Move imported objects to the new collection
                     for obj in bpy.context.selected_objects:
-                        bpy.context.scene.collection.objects.unlink(obj)
+                        # bpy.context.scene.collection.objects.unlink(obj)
+                        for collection in obj.users_collection:
+                            collection.objects.unlink(obj)
                         new_collection.objects.link(obj)
 
-                        # Apply transforms
-                        bpy.context.view_layer.objects.active = obj
-                        bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+                        # # Apply transforms
+                        # bpy.context.view_layer.objects.active = obj
+                        # bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
 
-                        material_name = obj.name + "_mat"
-                        material = bpy.data.materials.get(material_name)
-                        if not material:
-                            material = bpy.data.materials.new(name=material_name)
-                            create_pbr_shader(material, extract_path)
-                        obj.data.materials.clear()
-                        obj.data.materials.append(material)
+                        if obj.type == 'MESH':
+                            # bpy.ops.object.parent_clear(type='CLEAR_KEEP_TRANSFORM')
+                            obj.parent = new_empty
+                            material_name = obj.name + "_mat"
+                            material = bpy.data.materials.get(material_name)
+                            if not material:
+                                material = bpy.data.materials.new(name=material_name)
+                                create_pbr_shader(material, extract_path)
+                            obj.data.materials.clear()
+                            obj.data.materials.append(material)
+                        else:
+                            bpy.data.objects.remove(obj)
+                    # Make the empty the active object and select it
+                    bpy.context.view_layer.objects.active = new_empty
+                    new_empty.select_set(True)
         else:
             # Implement import of other asset types
             pass
