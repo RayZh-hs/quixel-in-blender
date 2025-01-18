@@ -96,6 +96,9 @@ def load_assets_in_background(file_path,asset_type):
     results_data = data.get("results", [])
 
     for item in results_data:
+        asset_category = item["category"]["name"]
+        if asset_category == "Plants":
+            continue
         asset_name = item.get("title", "")
         uid = item.get("uid", "")
         # img_url = item["thumbnails"][0]["mediaUrl"]
@@ -186,17 +189,11 @@ def import_to_scene(asset_name, asset_path, asset_type):
 
                     # Move imported objects to the new collection
                     for obj in bpy.context.selected_objects:
-                        # bpy.context.scene.collection.objects.unlink(obj)
                         for collection in obj.users_collection:
                             collection.objects.unlink(obj)
                         new_collection.objects.link(obj)
 
-                        # # Apply transforms
-                        # bpy.context.view_layer.objects.active = obj
-                        # bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
-
                         if obj.type == 'MESH':
-                            # bpy.ops.object.parent_clear(type='CLEAR_KEEP_TRANSFORM')
                             obj.parent = new_empty
                             material_name = obj.name + "_mat"
                             material = bpy.data.materials.get(material_name)
@@ -210,9 +207,29 @@ def import_to_scene(asset_name, asset_path, asset_type):
                     # Make the empty the active object and select it
                     bpy.context.view_layer.objects.active = new_empty
                     new_empty.select_set(True)
-        else:
-            # Implement import of other asset types
-            pass
+            return 0
+
+        elif asset_type == 'material':
+            ass_name = os.path.splitext(os.path.basename(asset_name))[0]
+            active_object = bpy.context.active_object
+            if active_object is not None:
+                print("Active Object Name:", active_object.name)
+                if active_object.type == 'MESH':
+                    material_name = ass_name + "_mat"
+                    material = bpy.data.materials.get(material_name)
+                    if not material:
+                        material = bpy.data.materials.new(name=material_name)
+                        create_pbr_shader(material, extract_path)
+                    active_object.data.materials.clear()
+                    active_object.data.materials.append(material)
+                    return 0
+                else:
+                    print("Select a mesh object.")
+                    return 1
+            else:
+                print("Select a mesh object.")
+                return 1
+    return 1
 
 
 def create_pbr_shader(material, texture_maps_path):
@@ -343,17 +360,20 @@ class FILEBROWSER_PT_assets(bpy.types.Panel):
         row = layout.row(align=True)
         row.operator("filebrowser.set_asset_type", text="3D Model", depress=context.scene.asset_type == '3d-model').asset_type = '3d-model'
         row.operator("filebrowser.set_asset_type", text="Material", depress=context.scene.asset_type == 'material').asset_type = 'material'
-        row.operator("filebrowser.set_asset_type", text="Decal", depress=context.scene.asset_type == 'decal').asset_type = 'decal'
+        # row.operator("filebrowser.set_asset_type", text="Decal", depress=context.scene.asset_type == 'decal').asset_type = 'decal'
+
+        # Add checkboxes for Import Asset and Create Asset
+        row = layout.row(align=True)
+        row.operator("filebrowser.set_import_type", text="Import To Scene", depress=context.scene.import_type == 'import_to_scene').import_type = 'import_to_scene'
+        row.operator("filebrowser.set_import_type", text="Add To Assets", depress=context.scene.import_type == 'add_to_asset_library').import_type = 'add_to_asset_library'
+
+        # row.prop(context.scene, "instance_to_scene")
+        # row.prop(context.scene, "add_to_asset_library")
 
         # Search box and search button
         row = layout.row()
         row.prop(context.scene, "asset_search", text="")
         row.operator("filebrowser.search_assets", text="", icon='VIEWZOOM')
-
-        # Add checkboxes for Import Asset and Create Asset
-        row = layout.row()
-        row.prop(context.scene, "instance_to_scene")
-        row.prop(context.scene, "add_to_asset_library")
 
         if self.assets:
             row = layout.row()
@@ -418,12 +438,18 @@ class IMPORT_ASSET_OT_import_asset(bpy.types.Operator):
         asset_name = None
         asset_uid = None
 
+        asset_format = None
         if asset_type == '3d-model':
+            asset_format = "fbx"
+        if asset_type == "material":
+            asset_format = "texture-set"
+
+        if asset_format:
             for asset in data:
-                if asset["assetFormatType"]["code"] == "fbx":
+                if asset["assetFormatType"]["code"] == asset_format:
                     asset_name = asset["files"][-1]["name"]
                     asset_uid = asset["files"][-1]["uid"]  # Get UID of last file
-            print("Last UID for fbx:", asset_uid)
+            print(f"Last UID for {asset_format}: {asset_uid}")
 
             asset_path = os.path.join(assets_dir, asset_name)
 
@@ -438,7 +464,7 @@ class IMPORT_ASSET_OT_import_asset(bpy.types.Operator):
                     link_expired = datetime.now(timezone.utc) > expires_dt
 
                 if link_expired:
-                    url = f"https://www.fab.com/i/listings/{self.uid}/asset-formats/fbx/files/{asset_uid}/download-info/binary"
+                    url = f"https://www.fab.com/i/listings/{self.uid}/asset-formats/{asset_format}/files/{asset_uid}/download-info/binary"
                     referer = f"https://www.fab.com/i/listings/{self.uid}"
 
                     print(f"Running {utils_path} inside the virtual environment...")
@@ -453,19 +479,27 @@ class IMPORT_ASSET_OT_import_asset(bpy.types.Operator):
                     down_link = data["downloadInfo"][0]["downloadUrl"]
                 subprocess.check_call(["curl", "-o", asset_path, down_link])
 
-            if context.scene.instance_to_scene:
-                import_to_scene(asset_name, asset_path, asset_type)
+            if context.scene.import_type == "import_to_scene":
+                import_result = import_to_scene(asset_name, asset_path, asset_type)
+                if import_result != 0:
+                    self.report({'INFO'}, "Asset Import Failed")
+                    return {'FINISHED'}
 
-        # subprocess.run(
-        #     [blender_path, "-b", "--factory-startup", "-P", asset_importer_path, "--", assets_dir, asset_name, asset_path, self.img_path],
-        #     check=True,
-        # )
 
-        # for area in bpy.context.screen.areas:
-        #     if area.type == 'FILE_BROWSER':
-        #         with bpy.context.temp_override(area=area):
-        #             bpy.ops.asset.library_refresh()
-        #         break
+            elif context.scene.import_type == "add_to_asset_library":
+                command = [blender_path, "-b", "--factory-startup", "-P", asset_importer_path, "--", assets_dir, asset_name, asset_path, asset_type, self.img_path]
+                process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+
+                com = process.communicate()[0]
+                if process.returncode != 0:
+                    print("Error Importing and Marking Asset")
+                else:
+                    print(str(com))
+                    for area in bpy.context.screen.areas:
+                        if area.type == 'FILE_BROWSER':
+                            with bpy.context.temp_override(area=area):
+                                bpy.ops.asset.library_refresh()
+                            break
 
         self.report({'INFO'}, "Asset Imported")
         return {'FINISHED'}
@@ -522,15 +556,33 @@ class FILEBROWSER_OT_set_asset_type(bpy.types.Operator):
         return {'FINISHED'}
 
 
-def register():
-    bpy.utils.register_class(FILEBROWSER_PT_assets)
-    bpy.utils.register_class(FILEBROWSER_OT_load_more)
-    bpy.utils.register_class(IMPORT_ASSET_OT_import_asset)
-    bpy.utils.register_class(FILEBROWSER_OT_search_assets)
-    bpy.utils.register_class(FILEBROWSER_OT_search_assets_modal)
-    bpy.utils.register_class(FILEBROWSER_OT_set_asset_type)
+class FILEBROWSER_OT_set_import_type(bpy.types.Operator):
+    bl_idname = "filebrowser.set_import_type"
+    bl_label = "Set Import Type"
 
-    # bpy.types.Scene.asset_search = bpy.props.StringProperty(name="Search Assets")
+    import_type: bpy.props.StringProperty()
+
+    def execute(self, context):
+        context.scene.import_type = self.import_type
+        # bpy.ops.filebrowser.search_assets()
+        return {'FINISHED'}
+
+
+classes = [
+    FILEBROWSER_PT_assets,
+    FILEBROWSER_OT_load_more,
+    IMPORT_ASSET_OT_import_asset,
+    FILEBROWSER_OT_search_assets,
+    FILEBROWSER_OT_search_assets_modal,
+    FILEBROWSER_OT_set_asset_type,
+    FILEBROWSER_OT_set_import_type,
+]
+
+
+def register():
+    for cls in classes:
+        bpy.utils.register_class(cls)
+
     bpy.types.Scene.asset_search = bpy.props.StringProperty(
         name="Search Assets",
         update=FILEBROWSER_OT_search_assets.execute
@@ -541,37 +593,23 @@ def register():
         default='3d-model'
     )
 
-    bpy.types.Scene.instance_to_scene = bpy.props.BoolProperty(
-        name="Instance to Scene",
-        description="Instance to current scene",
-        default=True
-    )
-
-    bpy.types.Scene.add_to_asset_library = bpy.props.BoolProperty(
-        name="Add to Asset Library",
-        description="Add to Asset Library",
-        default=False
+    bpy.types.Scene.import_type = bpy.props.StringProperty(
+        name="Import Type",
+        default='import_to_scene'
     )
 
     FILEBROWSER_PT_assets.assets = bpy.utils.previews.new()
-    # bpy.ops.filebrowser.search_assets_modal()
     setup_env()
 
 
 def unregister():
-    bpy.utils.unregister_class(FILEBROWSER_PT_assets)
-    bpy.utils.unregister_class(FILEBROWSER_OT_load_more)
-    bpy.utils.unregister_class(IMPORT_ASSET_OT_import_asset)
-    bpy.utils.unregister_class(FILEBROWSER_OT_search_assets)
-    bpy.utils.unregister_class(FILEBROWSER_OT_search_assets_modal)
-    bpy.utils.unregister_class(FILEBROWSER_OT_set_asset_type)
+    for cls in reversed(classes):
+        bpy.utils.unregister_class(cls)
 
     del bpy.types.Scene.asset_search
     del bpy.types.Scene.asset_type
-    del bpy.types.Scene.instance_to_scene
-    del bpy.types.Scene.add_to_asset_library
+    del bpy.types.Scene.import_type
 
-    # Clean up previews to avoid memory leaks
     if FILEBROWSER_PT_assets.assets:
         bpy.utils.previews.remove(FILEBROWSER_PT_assets.assets)
         FILEBROWSER_PT_assets.assets = None
