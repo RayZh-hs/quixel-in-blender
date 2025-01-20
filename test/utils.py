@@ -128,6 +128,18 @@ def fetcher(url, header, file_path, query=None):
     print("All retry attempts failed. Exiting.")
 
 
+def download_file(url, out_file):
+    print("Downloading file...")
+    response = requests.get(url, stream=True)
+    response.raise_for_status()  # Raise an error for bad HTTP responses (4xx, 5xx)
+
+    with open(out_file, 'wb') as file:
+        for chunk in response.iter_content(chunk_size=8192):
+            file.write(chunk)
+
+    print(f"File downloaded successfully and saved as '{out_file}'.")
+
+
 def main(function_name, *args):
     if function_name == "crop_thumbnails":
         crop_thumbnails(*args)
@@ -137,6 +149,8 @@ def main(function_name, *args):
         fetch_asset_formats(*args)
     elif function_name == "fetch_down_link":
         fetch_down_link(*args)
+    elif function_name == "download_file":
+        download_file(*args)
     else:
         print("Function not found")
 

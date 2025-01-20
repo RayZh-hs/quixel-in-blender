@@ -63,12 +63,12 @@ def update_assets(context, cursor):
         url = "https://www.fab.com/i/listings/search"
         referer = "https://www.fab.com/sellers/Quixel"
 
-        print(f"Running {utils_path} inside the virtual environment...")
         command = [python_path, utils_path, "--function", "fetch_assets", url, referer, asset_type, query, cursor,]
+        print(f"Running {command} inside the virtual environment...")
         # result = subprocess.run(command, capture_output=True, text=True)
         # print(result)
         process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        print(process.communicate())
+        print(process.communicate()[0])
 
     # Stop any existing thread
     if loading_thread and loading_thread.is_alive():
@@ -113,14 +113,18 @@ def load_assets_in_background(file_path,asset_type):
 
         # Download the image if not already present
         if img_path and not os.path.exists(img_path):
-            subprocess.check_call(["curl", "-o", img_path, img_url])
+            # subprocess.check_call(["curl", "-o", img_path, img_url])
+            command = [python_path, utils_path, "--function", "download_file", img_url, img_path]
+            print(f"Running {command} inside the virtual environment...")
+            process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            print(process.communicate()[0])
             if asset_type in ('material', 'decal'):
-                print(f"Running {utils_path} inside the virtual environment...")
                 command = [python_path, utils_path, "--function", "crop_thumbnails", img_path,]
+                print(f"Running {command} inside the virtual environment...")
                 # result = subprocess.run(command, capture_output=True, text=True)
                 # print(result)
                 process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-                print(process.communicate())
+                print(process.communicate()[0])
 
         # Load the asset into the preview collection
         if img_path and os.path.exists(img_path):
@@ -356,19 +360,20 @@ class FILEBROWSER_PT_assets(bpy.types.Panel):
         layout = self.layout
         layout.alignment = "CENTER"
 
-        # Three buttons for asset type
         row = layout.row(align=True)
         row.operator("filebrowser.set_asset_type", text="3D Model", depress=context.scene.asset_type == '3d-model').asset_type = '3d-model'
         row.operator("filebrowser.set_asset_type", text="Material", depress=context.scene.asset_type == 'material').asset_type = 'material'
         # row.operator("filebrowser.set_asset_type", text="Decal", depress=context.scene.asset_type == 'decal').asset_type = 'decal'
 
-        # Add checkboxes for Import Asset and Create Asset
         row = layout.row(align=True)
         row.operator("filebrowser.set_import_type", text="Import To Scene", depress=context.scene.import_type == 'import_to_scene').import_type = 'import_to_scene'
         row.operator("filebrowser.set_import_type", text="Add To Assets", depress=context.scene.import_type == 'add_to_asset_library').import_type = 'add_to_asset_library'
 
-        # row.prop(context.scene, "instance_to_scene")
-        # row.prop(context.scene, "add_to_asset_library")
+        row = layout.row(align=True)
+        row.operator("filebrowser.set_import_size", text="raw", depress=context.scene.import_size == '0').import_size = '0'
+        row.operator("filebrowser.set_import_size", text="high", depress=context.scene.import_size == '1').import_size = '1'
+        row.operator("filebrowser.set_import_size", text="mid", depress=context.scene.import_size == '2').import_size = '2'
+        row.operator("filebrowser.set_import_size", text="low", depress=context.scene.import_size == '3').import_size = '3'
 
         # Search box and search button
         row = layout.row()
@@ -426,12 +431,12 @@ class IMPORT_ASSET_OT_import_asset(bpy.types.Operator):
             url = f"https://www.fab.com/i/listings/{self.uid}/asset-formats"
             referer = "https://www.fab.com/sellers/Quixel"
 
-            print(f"Running {utils_path} inside the virtual environment...")
             command = [python_path, utils_path, "--function", "fetch_asset_formats", url, referer, self.uid ]
+            print(f"Running {command} inside the virtual environment...")
             # result = subprocess.run(command, capture_output=True, text=True)
             # print(result)
             process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-            print(process.communicate())
+            print(process.communicate()[0])
 
         with open(asset_formats_file, "r") as f:
             data = json.load(f)
@@ -445,10 +450,11 @@ class IMPORT_ASSET_OT_import_asset(bpy.types.Operator):
             asset_format = "texture-set"
 
         if asset_format:
+            import_size = int(context.scene.import_size.strip())
             for asset in data:
                 if asset["assetFormatType"]["code"] == asset_format:
-                    asset_name = asset["files"][-1]["name"]
-                    asset_uid = asset["files"][-1]["uid"]  # Get UID of last file
+                    asset_name = asset["files"][import_size]["name"]
+                    asset_uid = asset["files"][import_size]["uid"]  # Get UID of last file
             print(f"Last UID for {asset_format}: {asset_uid}")
 
             asset_path = os.path.join(assets_dir, asset_name)
@@ -467,24 +473,29 @@ class IMPORT_ASSET_OT_import_asset(bpy.types.Operator):
                     url = f"https://www.fab.com/i/listings/{self.uid}/asset-formats/{asset_format}/files/{asset_uid}/download-info/binary"
                     referer = f"https://www.fab.com/i/listings/{self.uid}"
 
-                    print(f"Running {utils_path} inside the virtual environment...")
                     command = [python_path, utils_path, "--function", "fetch_down_link", url, referer, asset_uid]
+                    print(f"Running {command} inside the virtual environment...")
                     # result = subprocess.run(command, capture_output=True, text=True)
                     # print(result)
                     process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-                    print(process.communicate())
+                    print(process.communicate()[0])
 
                 with open(down_link_file, "r") as f:
                     data = json.load(f)
                     down_link = data["downloadInfo"][0]["downloadUrl"]
-                subprocess.check_call(["curl", "-o", asset_path, down_link])
+                # subprocess.check_call(["curl", "-o", asset_path, down_link])
+                # subprocess.check_call(["aria2c", "--dir", assets_dir, "--out", asset_name, down_link])
+
+                command = [python_path, utils_path, "--function", "download_file", down_link, asset_path]
+                print(f"Running {command} inside the virtual environment...")
+                process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                print(process.communicate()[0])
 
             if context.scene.import_type == "import_to_scene":
                 import_result = import_to_scene(asset_name, asset_path, asset_type)
                 if import_result != 0:
                     self.report({'INFO'}, "Asset Import Failed")
                     return {'FINISHED'}
-
 
             elif context.scene.import_type == "add_to_asset_library":
                 command = [blender_path, "-b", "--factory-startup", "-P", asset_importer_path, "--", assets_dir, asset_name, asset_path, asset_type, self.img_path]
@@ -564,7 +575,17 @@ class FILEBROWSER_OT_set_import_type(bpy.types.Operator):
 
     def execute(self, context):
         context.scene.import_type = self.import_type
-        # bpy.ops.filebrowser.search_assets()
+        return {'FINISHED'}
+
+
+class FILEBROWSER_OT_set_import_size(bpy.types.Operator):
+    bl_idname = "filebrowser.set_import_size"
+    bl_label = "Set Import Size"
+
+    import_size: bpy.props.StringProperty()
+
+    def execute(self, context):
+        context.scene.import_size = self.import_size
         return {'FINISHED'}
 
 
@@ -576,6 +597,7 @@ classes = [
     FILEBROWSER_OT_search_assets_modal,
     FILEBROWSER_OT_set_asset_type,
     FILEBROWSER_OT_set_import_type,
+    FILEBROWSER_OT_set_import_size,
 ]
 
 
@@ -598,6 +620,11 @@ def register():
         default='import_to_scene'
     )
 
+    bpy.types.Scene.import_size = bpy.props.StringProperty(
+        name="Import Size",
+        default='2'
+    )
+
     FILEBROWSER_PT_assets.assets = bpy.utils.previews.new()
     setup_env()
 
@@ -609,6 +636,7 @@ def unregister():
     del bpy.types.Scene.asset_search
     del bpy.types.Scene.asset_type
     del bpy.types.Scene.import_type
+    del bpy.types.Scene.import_size
 
     if FILEBROWSER_PT_assets.assets:
         bpy.utils.previews.remove(FILEBROWSER_PT_assets.assets)
