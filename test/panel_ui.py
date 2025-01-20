@@ -57,7 +57,7 @@ def update_assets(context, cursor):
     print(asset_type)
     query = context.scene.asset_search.strip()
     # cursor = cursors["curr_cursor"].strip()
-    file_path = os.path.join(data_dir, f"output_{asset_type}_{query}_{cursor}.json")
+    file_path = os.path.join(data_dir, f"search_{asset_type}_{query}_{cursor}.json")
 
     if not os.path.exists(file_path):
         url = "https://www.fab.com/i/listings/search"
@@ -420,7 +420,7 @@ class IMPORT_ASSET_OT_import_asset(bpy.types.Operator):
         print(f"Image Path: {self.img_path if self.img_path else 'No Image Available'}")
 
         asset_type = str(context.scene.asset_type).strip()
-        asset_formats_file = os.path.join(data_dir, f"output_{self.uid}.json")
+        asset_formats_file = os.path.join(data_dir, f"asset_{self.uid}.json")
 
         if not os.path.exists(asset_formats_file):
             url = f"https://www.fab.com/i/listings/{self.uid}/asset-formats"
@@ -454,7 +454,7 @@ class IMPORT_ASSET_OT_import_asset(bpy.types.Operator):
             asset_path = os.path.join(assets_dir, asset_name)
 
             if not os.path.exists(asset_path):
-                down_link_file = os.path.join(data_dir, f"output_{asset_uid}.json")
+                down_link_file = os.path.join(data_dir, f"downlink_{asset_uid}.json")
                 link_expired = True
 
                 if os.path.exists(down_link_file):

@@ -60,21 +60,21 @@ def fetch_assets(url, referer, asset_type=None, query=None, cursor=None):
     querystring["listing_types"] = asset_type
     querystring["q"] = query
 
-    file_path = os.path.join(data_dir, f"output_{asset_type}_{query}_{cursor}.json")
+    file_path = os.path.join(data_dir, f"search_{asset_type}_{query}_{cursor}.json")
 
     fetcher(url, headers, file_path, query=querystring)
 
 
 def fetch_asset_formats(url, referer, asset_uid=None):
     headers["Referer"] = referer
-    file_path = os.path.join(data_dir, f"output_{asset_uid}.json")
+    file_path = os.path.join(data_dir, f"asset_{asset_uid}.json")
 
     fetcher(url, headers, file_path)
 
 
 def fetch_down_link(url, referer, asset_uid=None):
     headers["Referer"] = referer
-    file_path = os.path.join(data_dir, f"output_{asset_uid}.json")
+    file_path = os.path.join(data_dir, f"downlink_{asset_uid}.json")
 
     fetcher(url, headers, file_path)
 
