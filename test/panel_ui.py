@@ -127,7 +127,11 @@ def load_assets_in_background(file_path,asset_type):
             command = [python_path, utils_path, "--function", "download_file", img_url, img_path]
             print(f"Running {command} inside the virtual environment...")
             process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-            print(process.communicate()[0])
+            # print(process.communicate()[0])
+            progress_thread = threading.Thread(target=update_ui_with_progress, args=(process,))
+            progress_thread.start()
+            progress_thread.join()
+            print('\n')
             if asset_type in ('material', 'decal'):
                 command = [python_path, utils_path, "--function", "crop_thumbnails", img_path,]
                 print(f"Running {command} inside the virtual environment...")
@@ -156,6 +160,7 @@ def update_ui_from_queue():
         item = asset_queue.get()
         if item is None:  # Stop signal
             print("Asset loading complete.")
+            bpy.context.window.cursor_set('DEFAULT')
             return None
         asset_name, uid, img_path, asset = item  # Ensure the queue holds correct values
         FILEBROWSER_PT_assets.assets[uid] = {"preview": asset, "img_path": img_path, "asset_name": asset_name}
@@ -455,6 +460,8 @@ class IMPORT_ASSET_OT_import_asset(bpy.types.Operator):
     img_path: bpy.props.StringProperty()
 
     def execute(self, context):
+        bpy.context.window.cursor_set('WAIT')
+
         print(f"Importing Asset: {self.asset_name}")
         print(f"UID: {self.uid}")
         print(f"Image Path: {self.img_path if self.img_path else 'No Image Available'}")
@@ -551,6 +558,7 @@ class IMPORT_ASSET_OT_import_asset(bpy.types.Operator):
                                 bpy.ops.asset.library_refresh()
                             break
 
+        bpy.context.window.cursor_set('DEFAULT')
         self.report({'INFO'}, "Asset Imported")
         return {'FINISHED'}
 
@@ -576,6 +584,7 @@ class FILEBROWSER_OT_search_assets(bpy.types.Operator):
     bl_label = "Search Assets"
 
     def execute(self, context):
+        bpy.context.window.cursor_set('WAIT')
         cursor = "0"
         FILEBROWSER_PT_assets.assets = None
         update_assets(context, cursor)
@@ -588,6 +597,7 @@ class FILEBROWSER_OT_load_more(bpy.types.Operator):
     bl_label = "Load More"
 
     def execute(self, context):
+        bpy.context.window.cursor_set('WAIT')
         if cursors["next_cursor"] is not None:
             cursors["curr_cursor"] = cursors["next_cursor"]
             self.report({'INFO'}, "Loading more assets")
