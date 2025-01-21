@@ -7,6 +7,7 @@ import subprocess
 import threading
 from datetime import datetime, timezone
 import zipfile
+import tempfile
 
 current_file_path = bpy.context.space_data.text.filepath
 current_file_dir = os.sep.join(current_file_path.split(os.sep)[:-1])
@@ -16,12 +17,16 @@ asset_importer_path = os.path.join(current_file_dir, "asset_importer.py")
 asset_queue = queue.Queue()
 loading_thread = None
 
-system_python = "/usr/bin/python3"
-env_dir = "/tmp/tmp-env"
+temp_dir = tempfile.gettempdir()
+if os.name == 'nt':
+    system_python = subprocess.check_output(['where', 'python']).strip().decode('utf-8')
+else:
+    system_python = subprocess.check_output(['which', 'python3']).strip().decode('utf-8')
+env_dir = os.path.join(temp_dir, "tmp-env")
 python_path = os.path.join(env_dir, "bin", "python")
 blender_path = "/opt/blender_builds/blender-4.2-lts/blender"
 
-data_dir = "/tmp/fab_data"
+data_dir = os.path.join(temp_dir, "fab_data")
 thumbnail_dir = os.path.join(data_dir, "thumbnails")
 assets_dir = os.path.join(data_dir, "assets")
 unzipped_assets_dir = os.path.join(assets_dir, "unzipped_assets")
