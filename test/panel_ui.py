@@ -359,6 +359,22 @@ def create_pbr_shader(material, texture_maps_path):
             links.new(normal_map.outputs['Normal'], principled_bsdf.inputs['Normal'])
 
 
+def update_ui_with_progress(process):
+    wm = bpy.context.window_manager
+    wm.progress_begin(0, 100)
+
+    try:
+        for line in iter(process.stdout.readline, ''):
+            if "Download Progress" in line:
+                progress = float(line.split("Download Progress:")[1].strip().replace('%', ''))
+                print(f"\rDownloading... {progress:.2f}%", end='')
+                wm.progress_update(progress)
+    except Exception as e:
+        print(f"Error updating progress: {e}")
+    finally:
+        wm.progress_end()
+
+
 ### Operators and Properties ###
 
 class FILEBROWSER_PT_assets(bpy.types.Panel):
@@ -503,8 +519,12 @@ class IMPORT_ASSET_OT_import_asset(bpy.types.Operator):
                 command = [python_path, utils_path, "--function", "download_file", down_link, asset_path]
                 print(f"Running {command} inside the virtual environment...")
                 process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-                print(process.communicate()[0])
-
+                # print(process.communicate()[0])
+                progress_thread = threading.Thread(target=update_ui_with_progress, args=(process,))
+                progress_thread.start()
+                progress_thread.join()
+                print('\n')
+                
             if context.scene.import_type == "import_to_scene":
                 import_result = import_to_scene(asset_name, asset_path, asset_type)
                 if import_result != 0:
@@ -530,20 +550,20 @@ class IMPORT_ASSET_OT_import_asset(bpy.types.Operator):
         return {'FINISHED'}
 
 
-class FILEBROWSER_OT_search_assets_modal(bpy.types.Operator):
-    """Detect Enter Key Press for Search"""
-    bl_idname = "filebrowser.search_assets_modal"
-    bl_label = "Search Assets Modal"
-
-    def modal(self, context, event):
-        if event.type in {'RET', 'NUMPAD_ENTER'} and event.value == 'PRESS':
-            bpy.ops.filebrowser.search_assets()
-            return {'FINISHED'}
-        return {'PASS_THROUGH'}
-
-    def invoke(self, context, event):
-        context.window_manager.modal_handler_add(self)
-        return {'RUNNING_MODAL'}
+# class FILEBROWSER_OT_search_assets_modal(bpy.types.Operator):
+#     """Detect Enter Key Press for Search"""
+#     bl_idname = "filebrowser.search_assets_modal"
+#     bl_label = "Search Assets Modal"
+#
+#     def modal(self, context, event):
+#         if event.type in {'RET', 'NUMPAD_ENTER'} and event.value == 'PRESS':
+#             bpy.ops.filebrowser.search_assets()
+#             return {'FINISHED'}
+#         return {'PASS_THROUGH'}
+#
+#     def invoke(self, context, event):
+#         context.window_manager.modal_handler_add(self)
+#         return {'RUNNING_MODAL'}
 
 
 class FILEBROWSER_OT_search_assets(bpy.types.Operator):
@@ -554,6 +574,7 @@ class FILEBROWSER_OT_search_assets(bpy.types.Operator):
         cursor = "0"
         FILEBROWSER_PT_assets.assets = None
         update_assets(context, cursor)
+        self.report({'INFO'}, "Loading Assets List")
         return {'FINISHED'}
 
 
@@ -566,6 +587,7 @@ class FILEBROWSER_OT_load_more(bpy.types.Operator):
             cursors["curr_cursor"] = cursors["next_cursor"]
             self.report({'INFO'}, "Loading more assets")
             update_assets(context, cursors["curr_cursor"])
+        self.report({'INFO'}, "Loading Assets List")
         return {'FINISHED'}
 
 
@@ -608,7 +630,7 @@ classes = [
     FILEBROWSER_OT_load_more,
     IMPORT_ASSET_OT_import_asset,
     FILEBROWSER_OT_search_assets,
-    FILEBROWSER_OT_search_assets_modal,
+    # FILEBROWSER_OT_search_assets_modal,
     FILEBROWSER_OT_set_asset_type,
     FILEBROWSER_OT_set_import_type,
     FILEBROWSER_OT_set_import_size,
