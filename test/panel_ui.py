@@ -8,6 +8,7 @@ import threading
 from datetime import datetime, timezone
 import zipfile
 import tempfile
+import uuid
 
 current_file_path = bpy.context.space_data.text.filepath
 current_file_dir = os.sep.join(current_file_path.split(os.sep)[:-1])
@@ -38,6 +39,10 @@ os.makedirs(thumbnail_dir, exist_ok=True)
 os.makedirs(assets_dir, exist_ok=True)
 os.makedirs(unzipped_assets_dir, exist_ok=True)
 os.makedirs(blender_files_dir, exist_ok=True)
+
+if not os.path.exists(catalog_file):
+    with open(catalog_file, 'w') as f:
+        f.write(f"VERSION 1\n{str(uuid.uuid4())}:3d:3d\n{str(uuid.uuid4())}:surface:surface\n")
 
 asset_library_paths = [library.path for library in bpy.context.preferences.filepaths.asset_libraries]
 if assets_dir not in asset_library_paths:
@@ -524,7 +529,7 @@ class IMPORT_ASSET_OT_import_asset(bpy.types.Operator):
                 progress_thread.start()
                 progress_thread.join()
                 print('\n')
-                
+
             if context.scene.import_type == "import_to_scene":
                 import_result = import_to_scene(asset_name, asset_path, asset_type)
                 if import_result != 0:

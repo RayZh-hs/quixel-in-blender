@@ -24,7 +24,7 @@ def initialize_catalog_file(catalog_file):
     """Initializes the catalog file if it doesn't exist."""
     if not os.path.exists(catalog_file):
         with open(catalog_file, 'w') as f:
-            f.write("VERSION 1\n")
+            f.write(f"VERSION 1\n{str(uuid.uuid4())}:3d:3d\n{str(uuid.uuid4())}:surface:surface\n")
             print(f"Initialized catalog file at {catalog_file}")
 
 
@@ -270,6 +270,7 @@ def import_and_mark_asset(base_path, asset_name, asset_path, asset_type, preview
     if asset_path.endswith(".zip"):
         extract_path = os.path.join(unzipped_assets_dir, asset_name)
         ass_name = os.path.splitext(os.path.basename(asset_name))[0]
+        blend_file_path = os.path.join(blender_files_dir, f"{ass_name}.blend")
 
         # Check if the asset is already unzipped
         if not os.path.exists(extract_path):
@@ -294,7 +295,6 @@ def import_and_mark_asset(base_path, asset_name, asset_path, asset_type, preview
         for fbx_file_name in os.listdir(extract_path):
             if fbx_file_name.endswith(".fbx"):
                 fbx_path = os.path.join(extract_path, fbx_file_name)
-                blend_file_path = os.path.join(blender_files_dir, f"{ass_name}.blend")
                 if not os.path.exists(preview_img):
                     preview_img = None
 
@@ -320,8 +320,6 @@ def import_and_mark_asset(base_path, asset_name, asset_path, asset_type, preview
             else:
                 assigned_catalog_uuid = existing_categories[category]
 
-            # ass_name = os.path.splitext(os.path.basename(asset_name))[0]
-
             if asset_type == '3d-model':
                 # Clear the existing scene
                 bpy.ops.wm.read_factory_settings(use_empty=True)
@@ -329,8 +327,6 @@ def import_and_mark_asset(base_path, asset_name, asset_path, asset_type, preview
                 # Import the fbx file
                 bpy.ops.import_scene.fbx(filepath=fbx_path)
                 print(f"Imported FBX: {fbx_path}")
-
-                # ass_name = os.path.splitext(os.path.basename(asset_name))[0]
 
                 # Create a collection for the asset
                 new_collection = bpy.data.collections.new(ass_name)
@@ -371,41 +367,34 @@ def import_and_mark_asset(base_path, asset_name, asset_path, asset_type, preview
                             with bpy.context.temp_override(**override):
                                 bpy.ops.ed.lib_id_load_custom_preview(filepath=preview_img)
                             print(f"Set custom preview image for object '{obj.name}'")
-
                     else:
                         bpy.data.objects.remove(obj)
 
             if asset_type == 'material':
-                pass
-                # bpy.ops.wm.read_factory_settings(use_empty=True)
-                # # mesh = bpy.data.meshes.new(name=ass_name)
-                # # plane_object = bpy.data.objects.new(name=ass_name, type='MESH', data=mesh)
-                #
-                # material_name = ass_name + "_mat"
-                # material = bpy.data.materials.get(material_name)
-                #
-                # if not material:
-                #     material = bpy.data.materials.new(name=material_name)
-                #     create_pbr_shader(material, extract_path)
-                #
-                # # plane_object.data.materials.clear()
-                # # plane_object.data.materials.append(material)
-                #
-                # material.asset_mark()
-                # material.asset_data.catalog_id = assigned_catalog_uuid
-                # print(f"Marked material '{material.name}' as asset with catalog ID {assigned_catalog_uuid}")
-                #
-                # if tags:
-                #     for tag_name in tags:
-                #         material.asset_data.tags.new(tag_name, skip_if_exists=True)
-                #
-                # # Set custom preview image for material
-                # if preview_img and os.path.exists(preview_img):
-                #     override = bpy.context.copy()
-                #     override["id"] = material
-                #     with bpy.context.temp_override(**override):
-                #         bpy.ops.ed.lib_id_load_custom_preview(filepath=preview_img)
-                #     print(f"Set custom preview image for material '{material.name}'")
+                bpy.ops.wm.read_factory_settings(use_empty=True)
+
+                material_name = ass_name + "_mat"
+                material = bpy.data.materials.get(material_name)
+
+                if not material:
+                    material = bpy.data.materials.new(name=material_name)
+                    create_pbr_shader(material, extract_path)
+
+                material.asset_mark()
+                material.asset_data.catalog_id = assigned_catalog_uuid
+                print(f"Marked material '{material.name}' as asset with catalog ID {assigned_catalog_uuid}")
+
+                if tags:
+                    for tag_name in tags:
+                        material.asset_data.tags.new(tag_name, skip_if_exists=True)
+
+                # Set custom preview image for material
+                if preview_img and os.path.exists(preview_img):
+                    override = bpy.context.copy()
+                    override["id"] = material
+                    with bpy.context.temp_override(**override):
+                        bpy.ops.ed.lib_id_load_custom_preview(filepath=preview_img)
+                    print(f"Set custom preview image for material '{material.name}'")
 
             # Disable .blend1 backup creation
             bpy.context.preferences.filepaths.save_version = 0
