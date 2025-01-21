@@ -248,14 +248,25 @@ def create_pbr_shader(material, texture_maps_path):
 
     # Create a Principled BSDF shader
     principled_bsdf = nodes.new(type='ShaderNodeBsdfPrincipled')
-    principled_bsdf.location = (200, 0)
+    principled_bsdf.location = (100, 0)
 
     # Create Material Output node
     material_output = nodes.new(type='ShaderNodeOutputMaterial')
-    material_output.location = (600, 0)
+    material_output.location = (400, 0)
 
     # Link the Principled BSDF to the Material Output
     links.new(principled_bsdf.outputs['BSDF'], material_output.inputs['Surface'])
+
+    # Create Texture Coordinate node
+    tex_coord_node = nodes.new(type='ShaderNodeTexCoord')
+    tex_coord_node.location = (-1200, 0)
+
+    # Create Mapping node
+    mapping_node = nodes.new(type='ShaderNodeMapping')
+    mapping_node.location = (-1000, 0)
+
+    # Link Texture Coordinate to Mapping
+    links.new(tex_coord_node.outputs['UV'], mapping_node.inputs['Vector'])
 
     # Define texture map keywords
     texture_map_keywords = {
@@ -270,16 +281,6 @@ def create_pbr_shader(material, texture_maps_path):
 
     # Get all jpg files in the specified directory
     texture_files = [f for f in os.listdir(texture_maps_path) if f.endswith('.jpg')]
-
-    # Create nodes for AO and Bump mapping
-    mix_rgb = nodes.new(type='ShaderNodeMixRGB')
-    mix_rgb.blend_type = 'MULTIPLY'
-    mix_rgb.location = (-200, 0)
-
-    bump_node = nodes.new(type='ShaderNodeBump')
-    bump_node.inputs['Strength'].default_value = 0.1
-    bump_node.inputs['Distance'].default_value = 0.1
-    bump_node.location = (-200, -200)
 
     normal_map = nodes.new(type='ShaderNodeNormalMap')
     normal_map.location = (-400, -200)
@@ -310,16 +311,20 @@ def create_pbr_shader(material, texture_maps_path):
 
             texture_nodes[map_type] = image_texture
 
-    # Connect Base Color
+            # Connect Mapping node to each texture's vector input
+            links.new(mapping_node.outputs['Vector'], image_texture.inputs['Vector'])
+
+    # Connect Base Color and AO
     if 'Base Color' in texture_nodes:
-        links.new(texture_nodes['Base Color'].outputs['Color'], mix_rgb.inputs[1])
-
-    # Connect AO to MixRGB
-    if 'AO' in texture_nodes:
-        links.new(texture_nodes['AO'].outputs['Color'], mix_rgb.inputs[2])
-
-    # Connect MixRGB output to Principled BSDF Base Color
-    links.new(mix_rgb.outputs['Color'], principled_bsdf.inputs['Base Color'])
+        if 'AO' in texture_nodes:
+            mix_rgb = nodes.new(type='ShaderNodeMixRGB')
+            mix_rgb.blend_type = 'MULTIPLY'
+            mix_rgb.location = (-200, 0)
+            links.new(texture_nodes['Base Color'].outputs['Color'], mix_rgb.inputs[1])
+            links.new(texture_nodes['AO'].outputs['Color'], mix_rgb.inputs[2])
+            links.new(mix_rgb.outputs['Color'], principled_bsdf.inputs['Base Color'])
+        else:
+            links.new(texture_nodes['Base Color'].outputs['Color'], principled_bsdf.inputs['Base Color'])
 
     # Connect Roughness
     if 'Roughness' in texture_nodes:
@@ -335,14 +340,18 @@ def create_pbr_shader(material, texture_maps_path):
 
     # Connect Normal and Bump
     if 'Normal' in texture_nodes:
-        links.new(texture_nodes['Normal'].outputs['Color'], normal_map.inputs['Color'])
-
-    if 'Bump' in texture_nodes:
-        links.new(texture_nodes['Bump'].outputs['Color'], bump_node.inputs['Height'])
-
-    # Connect Bump to Normal and then to Principled BSDF
-    links.new(normal_map.outputs['Normal'], bump_node.inputs['Normal'])
-    links.new(bump_node.outputs['Normal'], principled_bsdf.inputs['Normal'])
+        if 'Bump' in texture_nodes:
+            bump_node = nodes.new(type='ShaderNodeBump')
+            bump_node.inputs['Strength'].default_value = 0.1
+            bump_node.inputs['Distance'].default_value = 0.1
+            bump_node.location = (-200, -200)
+            links.new(texture_nodes['Bump'].outputs['Color'], bump_node.inputs['Height'])
+            links.new(texture_nodes['Normal'].outputs['Color'], normal_map.inputs['Color'])
+            links.new(normal_map.outputs['Normal'], bump_node.inputs['Normal'])
+            links.new(bump_node.outputs['Normal'], principled_bsdf.inputs['Normal'])
+        else:
+            links.new(texture_nodes['Normal'].outputs['Color'], normal_map.inputs['Color'])
+            links.new(normal_map.outputs['Normal'], principled_bsdf.inputs['Normal'])
 
 
 ### Operators and Properties ###
