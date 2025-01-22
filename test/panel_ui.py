@@ -563,22 +563,6 @@ class IMPORT_ASSET_OT_import_asset(bpy.types.Operator):
         return {'FINISHED'}
 
 
-# class FILEBROWSER_OT_search_assets_modal(bpy.types.Operator):
-#     """Detect Enter Key Press for Search"""
-#     bl_idname = "filebrowser.search_assets_modal"
-#     bl_label = "Search Assets Modal"
-#
-#     def modal(self, context, event):
-#         if event.type in {'RET', 'NUMPAD_ENTER'} and event.value == 'PRESS':
-#             bpy.ops.filebrowser.search_assets()
-#             return {'FINISHED'}
-#         return {'PASS_THROUGH'}
-#
-#     def invoke(self, context, event):
-#         context.window_manager.modal_handler_add(self)
-#         return {'RUNNING_MODAL'}
-
-
 class FILEBROWSER_OT_search_assets(bpy.types.Operator):
     bl_idname = "filebrowser.search_assets"
     bl_label = "Search Assets"
@@ -645,7 +629,6 @@ classes = [
     FILEBROWSER_OT_load_more,
     IMPORT_ASSET_OT_import_asset,
     FILEBROWSER_OT_search_assets,
-    # FILEBROWSER_OT_search_assets_modal,
     FILEBROWSER_OT_set_asset_type,
     FILEBROWSER_OT_set_import_type,
     FILEBROWSER_OT_set_import_size,
