@@ -53,7 +53,7 @@ cursors = {"curr_cursor": "0", "next_cursor": "0"}
 
 
 class AssetProcessorPreferences(bpy.types.AddonPreferences):
-    """Preferences for the Asset Processor addon"""
+    """Preferences for the addon"""
     bl_idname = __name__
 
     blender_executable_path: bpy.props.StringProperty(
@@ -68,6 +68,7 @@ class AssetProcessorPreferences(bpy.types.AddonPreferences):
         description="Path to save assets data",
         subtype='DIR_PATH',
         default=def_asset_data_path,
+        update=lambda self, context: update_asset_data_path(self, context)
     )
 
     def draw(self, context):
@@ -91,6 +92,24 @@ def initialize_paths():
     asset_library_paths = [library.path for library in bpy.context.preferences.filepaths.asset_libraries]
     if assets_dir not in asset_library_paths:
         bpy.ops.preferences.asset_library_add(directory=assets_dir)
+
+
+def update_asset_data_path(self, context):
+    global data_dir, thumbnail_dir, assets_dir, json_dir, unzipped_assets_dir, blender_files_dir, catalog_file
+
+    # Update paths based on the new asset_data_path
+    data_dir = os.path.join(self.asset_data_path, "fab_data")
+    thumbnail_dir = os.path.join(data_dir, "thumbnails")
+    assets_dir = os.path.join(data_dir, "assets")
+    json_dir = os.path.join(data_dir, "json")
+    unzipped_assets_dir = os.path.join(assets_dir, "unzipped_assets")
+    blender_files_dir = os.path.join(assets_dir, "blender_files")
+    catalog_file = os.path.join(assets_dir, "blender_assets.cats.txt")
+
+    # Reinitialize directories
+    initialize_paths()
+
+    print("Updated asset data path and dependent paths.")
 
 
 def setup_env():
