@@ -34,7 +34,7 @@ else:
     system_python = subprocess.check_output(['which', 'python3']).strip().decode('utf-8')
 env_dir = os.path.join(temp_dir, "tmp-env")
 python_path = os.path.join(env_dir, "bin", "python")
-blender_path = "/opt/blender_builds/blender-4.2-lts/blender"
+# blender_path = "/opt/blender_builds/blender-4.2-lts/blender"
 
 data_dir = os.path.join(temp_dir, "fab_data")
 thumbnail_dir = os.path.join(data_dir, "thumbnails")
@@ -57,17 +57,17 @@ class AssetProcessorPreferences(bpy.types.AddonPreferences):
         default="",
     )
 
-    asset_folder_path: bpy.props.StringProperty(
-        name="Asset Folder Path",
-        description="Path to save downloaded assets",
-        subtype='DIR_PATH',
-        default="",
-    )
+    # asset_data_path: bpy.props.StringProperty(
+    #     name="Asset Data Path",
+    #     description="Path to save assets data",
+    #     subtype='DIR_PATH',
+    #     default="/tmp/",
+    # )
 
     def draw(self, context):
         layout = self.layout
         layout.prop(self, "blender_executable_path")
-        layout.prop(self, "asset_folder_path")
+        # layout.prop(self, "asset_data_path")
 
 
 def initialize_paths():
@@ -578,6 +578,11 @@ class IMPORT_ASSET_OT_import_asset(bpy.types.Operator):
                     return {'FINISHED'}
 
             elif context.scene.import_type == "add_to_asset_library":
+                prefs = context.preferences.addons[__name__].preferences
+                blender_path = prefs.blender_executable_path
+                if not blender_path or not os.path.isfile(blender_path):
+                    self.report({"ERROR"}, "Invalid Blender executable path!")
+                    return {'CANCELLED'}
                 command = [blender_path, "-b", "--factory-startup", "-P", asset_importer_path, "--", assets_dir, asset_name, asset_path, asset_type, self.img_path]
                 process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
 
@@ -715,61 +720,4 @@ def unregister():
 
 if __name__ == "__main__":
     register()
-
-
-
-
-# class ASSET_OT_RunProcessor(bpy.types.Operator):
-#     """Run the asset processing script"""
-#     bl_idname = "asset_processor.run_processor"
-#     bl_label = "Process Assets"
-#     bl_options = {'REGISTER', 'UNDO'}
-#
-#     def execute(self, context):
-#         # Get addon preferences
-#         prefs = context.preferences.addons[__name__].preferences
-#         blender_path = prefs.blender_executable_path
-#         asset_path = prefs.asset_folder_path
-#
-#         if not blender_path or not os.path.isfile(blender_path):
-#             self.report({"ERROR"}, "Invalid Blender executable path!")
-#             return {'CANCELLED'}
-#
-#         if not asset_path or not os.path.isdir(asset_path):
-#             self.report({"ERROR"}, "Invalid Asset Folder path!")
-#             return {'CANCELLED'}
-#
-#         # Run the script using subprocess
-#         try:
-#             subprocess.run(
-#                 [blender_path, "-b", "--factory-startup", "-P", os.path.join(os.path.dirname(__file__), "main.py"), "--", asset_path],
-#                 check=True,
-#             )
-#             self.report({"INFO"}, "Assets processed successfully!")
-#
-#             # Add Asset Library after processing
-#             self.add_asset_library(asset_path)
-#
-#         except subprocess.CalledProcessError as e:
-#             self.report({"ERROR"}, f"Failed to process assets: {e}")
-#             return {'CANCELLED'}
-#
-#         return {'FINISHED'}
-#
-#     def add_asset_library(self, library_path):
-#         """Adds the folder as an Asset Library if it doesn't already exist."""
-#         existing_libraries = bpy.context.preferences.filepaths.asset_libraries
-#
-#         # Normalize the provided library path for consistent comparison
-#         normalized_library_path = os.path.normpath(library_path)
-#
-#         # Check if the normalized path already exists in asset libraries
-#         for lib in existing_libraries:
-#             if os.path.normpath(lib.path) == normalized_library_path:
-#                 self.report({"INFO"}, "Asset Library already exists.")
-#                 return
-#
-#         # Add the new library
-#         bpy.ops.preferences.asset_library_add(directory=normalized_library_path)
-#         self.report({"INFO"}, f"Added Asset Library: {normalized_library_path}")
 
