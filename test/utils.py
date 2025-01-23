@@ -128,33 +128,29 @@ def fetcher(url, header, file_path, query=None):
     print("All retry attempts failed. Exiting.")
 
 
-# def download_file(url, out_file):
-#     print("Downloading file...")
-#     response = requests.get(url, stream=True)
-#     response.raise_for_status()  # Raise an error for bad HTTP responses (4xx, 5xx)
-#
-#     with open(out_file, 'wb') as file:
-#         for chunk in response.iter_content(chunk_size=8192):
-#             file.write(chunk)
-#
-#     print(f"File downloaded successfully and saved as '{out_file}'.")
-
-
 def download_file(url, out_file):
     print("Downloading file...")
     response = requests.get(url, stream=True)
-    response.raise_for_status()  # Raise an error for bad HTTP responses (4xx, 5xx)
+    response.raise_for_status()
 
     total_size = int(response.headers.get('content-length', 0))
     downloaded_size = 0
 
+    # Determine chunk size dynamically
+    if total_size < 1_000_000:  # Less than 1 MB
+        chunk_size = 8192  # 8 KB
+    elif total_size < 100_000_000:  # 1 MB to 100 MB
+        chunk_size = 65536  # 64 KB
+    else:  # Greater than 100 MB
+        chunk_size = 262144  # 256 KB
+
     with open(out_file, 'wb') as file:
-        for chunk in response.iter_content(chunk_size=8192):
+        for chunk in response.iter_content(chunk_size=chunk_size):
             file.write(chunk)
             downloaded_size += len(chunk)
             if total_size > 0:
                 progress = (downloaded_size / total_size) * 100
-                print(f"Download Progress: {progress:.2f}%")  # Output percentage to stdout
+                print(f"Download Progress: {progress:.2f}%")
             else:
                 print("Download Progress: Unknown file size")
 
