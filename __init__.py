@@ -9,6 +9,8 @@ from datetime import datetime, timezone
 import zipfile
 import tempfile
 import uuid
+import platform
+
 
 bl_info = {
     "name": "Fab to Blender",
@@ -22,27 +24,31 @@ bl_info = {
 
 current_file_dir = os.path.join(os.path.dirname(__file__))
 utils_path = os.path.join(current_file_dir, "test", "utils.py")
-asset_importer_path = os.path.join(current_file_dir, "test","asset_importer.py")
+asset_importer_path = os.path.join(current_file_dir, "test", "asset_importer.py")
 
-asset_queue = queue.Queue()
-loading_thread = None
+def_asset_data_path = ""
+system_python = ""
 
-temp_dir = tempfile.gettempdir()
-if os.name == 'nt':
-    system_python = subprocess.check_output(['where', 'python']).strip().decode('utf-8')
+if platform.system() == 'Windows':
+    def_asset_data_path = os.path.join(os.getenv('USERPROFILE'), 'Documents')
+    system_python = subprocess.check_output(['where', 'python3']).strip().decode('utf-8')
 else:
+    def_asset_data_path = os.path.join(os.getenv('HOME'), 'Documents')
     system_python = subprocess.check_output(['which', 'python3']).strip().decode('utf-8')
-env_dir = os.path.join(temp_dir, "tmp-env")
-python_path = os.path.join(env_dir, "bin", "python")
-# blender_path = "/opt/blender_builds/blender-4.2-lts/blender"
 
-data_dir = os.path.join(temp_dir, "fab_data")
+env_dir = os.path.join(def_asset_data_path, "fab-env")
+python_path = os.path.join(env_dir, "bin", "python")
+
+data_dir = os.path.join(def_asset_data_path, "fab_data")
 thumbnail_dir = os.path.join(data_dir, "thumbnails")
 assets_dir = os.path.join(data_dir, "assets")
+json_dir = os.path.join(data_dir, "json")
 unzipped_assets_dir = os.path.join(assets_dir, "unzipped_assets")
 blender_files_dir = os.path.join(assets_dir, "blender_files")
 catalog_file = os.path.join(assets_dir, "blender_assets.cats.txt")
 
+asset_queue = queue.Queue()
+loading_thread = None
 cursors = {"curr_cursor": "0", "next_cursor": "0"}
 
 
@@ -57,23 +63,24 @@ class AssetProcessorPreferences(bpy.types.AddonPreferences):
         default="",
     )
 
-    # asset_data_path: bpy.props.StringProperty(
-    #     name="Asset Data Path",
-    #     description="Path to save assets data",
-    #     subtype='DIR_PATH',
-    #     default="/tmp/",
-    # )
+    asset_data_path: bpy.props.StringProperty(
+        name="Asset Data Path",
+        description="Path to save assets data",
+        subtype='DIR_PATH',
+        default=def_asset_data_path,
+    )
 
     def draw(self, context):
         layout = self.layout
         layout.prop(self, "blender_executable_path")
-        # layout.prop(self, "asset_data_path")
+        layout.prop(self, "asset_data_path")
 
 
 def initialize_paths():
     os.makedirs(data_dir, exist_ok=True)
     os.makedirs(thumbnail_dir, exist_ok=True)
     os.makedirs(assets_dir, exist_ok=True)
+    os.makedirs(json_dir, exist_ok=True)
     os.makedirs(unzipped_assets_dir, exist_ok=True)
     os.makedirs(blender_files_dir, exist_ok=True)
 
@@ -101,13 +108,13 @@ def update_assets(context, cursor):
     print(asset_type)
     query = context.scene.asset_search.strip()
     # cursor = cursors["curr_cursor"].strip()
-    file_path = os.path.join(data_dir, f"search_{asset_type}_{query}_{cursor}.json")
+    file_path = os.path.join(json_dir, f"search_{asset_type}_{query}_{cursor}.json")
 
     if not os.path.exists(file_path):
         url = "https://www.fab.com/i/listings/search"
         referer = "https://www.fab.com/sellers/Quixel"
 
-        command = [python_path, utils_path, "--function", "fetch_assets", url, referer, asset_type, query, cursor,]
+        command = [python_path, utils_path, "--function", "fetch_assets", url, referer, json_dir, asset_type, query, cursor,]
         print(f"Running {command} inside the virtual environment...")
         # result = subprocess.run(command, capture_output=True, text=True)
         # print(result)
@@ -501,13 +508,13 @@ class IMPORT_ASSET_OT_import_asset(bpy.types.Operator):
         print(f"Image Path: {self.img_path if self.img_path else 'No Image Available'}")
 
         asset_type = str(context.scene.asset_type).strip()
-        asset_formats_file = os.path.join(data_dir, f"asset_{self.uid}.json")
+        asset_formats_file = os.path.join(json_dir, f"asset_{self.uid}.json")
 
         if not os.path.exists(asset_formats_file):
             url = f"https://www.fab.com/i/listings/{self.uid}/asset-formats"
             referer = "https://www.fab.com/sellers/Quixel"
 
-            command = [python_path, utils_path, "--function", "fetch_asset_formats", url, referer, self.uid ]
+            command = [python_path, utils_path, "--function", "fetch_asset_formats", url, referer, json_dir, self.uid]
             print(f"Running {command} inside the virtual environment...")
             # result = subprocess.run(command, capture_output=True, text=True)
             # print(result)
@@ -536,7 +543,7 @@ class IMPORT_ASSET_OT_import_asset(bpy.types.Operator):
             asset_path = os.path.join(assets_dir, asset_name)
 
             if not os.path.exists(asset_path):
-                down_link_file = os.path.join(data_dir, f"downlink_{asset_uid}.json")
+                down_link_file = os.path.join(json_dir, f"downlink_{asset_uid}.json")
                 link_expired = True
 
                 if os.path.exists(down_link_file):
@@ -549,7 +556,7 @@ class IMPORT_ASSET_OT_import_asset(bpy.types.Operator):
                     url = f"https://www.fab.com/i/listings/{self.uid}/asset-formats/{asset_format}/files/{asset_uid}/download-info/binary"
                     referer = f"https://www.fab.com/i/listings/{self.uid}"
 
-                    command = [python_path, utils_path, "--function", "fetch_down_link", url, referer, asset_uid]
+                    command = [python_path, utils_path, "--function", "fetch_down_link", url, referer, json_dir, asset_uid]
                     print(f"Running {command} inside the virtual environment...")
                     # result = subprocess.run(command, capture_output=True, text=True)
                     # print(result)

@@ -33,10 +33,10 @@ querystring = {
     "sort_by": "listingTypeWeight"
 }
 
-data_dir = "/tmp/fab_data"
+# data_dir = "/tmp/fab_data"
 
-if not os.path.exists(data_dir):
-    os.mkdir(data_dir)
+# if not os.path.exists(data_dir):
+#     os.mkdir(data_dir)
 
 
 def crop_thumbnails(image_path):
@@ -54,7 +54,7 @@ def crop_thumbnails(image_path):
         cropped_image.save(f"{image_path}")
 
 
-def fetch_assets(url, referer, asset_type=None, query=None, cursor=None):
+def fetch_assets(url, referer, data_dir, asset_type=None, query=None, cursor=None):
     headers["Referer"] = referer
     querystring["cursor"] = cursor
     querystring["listing_types"] = asset_type
@@ -65,14 +65,14 @@ def fetch_assets(url, referer, asset_type=None, query=None, cursor=None):
     fetcher(url, headers, file_path, query=querystring)
 
 
-def fetch_asset_formats(url, referer, asset_uid=None):
+def fetch_asset_formats(url, referer, data_dir, asset_uid=None):
     headers["Referer"] = referer
     file_path = os.path.join(data_dir, f"asset_{asset_uid}.json")
 
     fetcher(url, headers, file_path)
 
 
-def fetch_down_link(url, referer, asset_uid=None):
+def fetch_down_link(url, referer, data_dir, asset_uid=None):
     headers["Referer"] = referer
     file_path = os.path.join(data_dir, f"downlink_{asset_uid}.json")
 
