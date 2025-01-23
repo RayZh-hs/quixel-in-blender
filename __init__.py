@@ -25,6 +25,7 @@ bl_info = {
 current_file_dir = os.path.join(os.path.dirname(__file__))
 utils_path = os.path.join(current_file_dir, "test", "utils.py")
 asset_importer_path = os.path.join(current_file_dir, "test", "asset_importer.py")
+preview_img = os.path.join(current_file_dir, "images", "preview.svg")
 
 def_asset_data_path = ""
 system_python = ""
@@ -50,6 +51,7 @@ catalog_file = os.path.join(assets_dir, "blender_assets.cats.txt")
 asset_queue = queue.Queue()
 loading_thread = None
 cursors = {"curr_cursor": "0", "next_cursor": "0"}
+preview_collection = None
 
 
 class AssetProcessorPreferences(bpy.types.AddonPreferences):
@@ -120,6 +122,20 @@ def setup_env():
         subprocess.check_call([python_path, "-m", "pip", "install", "requests", "zstandard", "pillow"])
 
 
+def initialize_preview_collection():
+    global preview_collection, preview_img
+    if not preview_collection:
+        preview_collection = bpy.utils.previews.new()
+        preview_collection.load("preview", preview_img, 'IMAGE')
+
+
+def cleanup_preview_collection():
+    global preview_collection
+    if preview_collection:
+        bpy.utils.previews.remove(preview_collection)
+        preview_collection = None
+
+
 def update_assets(context, cursor):
     global loading_thread
 
@@ -174,24 +190,18 @@ def load_assets_in_background(file_path,asset_type):
         # img_url = item["thumbnails"][0]["mediaUrl"]
         img_url = next((img["url"] for img in item["thumbnails"][0]["images"] if img["height"] == 180), None)
         # img_name = item["thumbnails"][0]["name"]
-        if img_url:
-            img_name = os.path.basename(img_url)
-            img_path = os.path.join(thumbnail_dir, img_name)
-        else:
-            img_name = "unknown.jpg"
-            img_path = None
+        # Determine the image path
+        img_name = os.path.basename(img_url) if img_url else None
+        img_path = os.path.join(thumbnail_dir, img_name) if img_name else preview_img
 
         # Download the image if not already present
-        if img_path and not os.path.exists(img_path):
+        if img_url and not os.path.exists(img_path):
             # subprocess.check_call(["curl", "-o", img_path, img_url])
             command = [python_path, utils_path, "--function", "download_file", img_url, img_path]
             print(f"Running {command} inside the virtual environment...")
             process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-            # print(process.communicate()[0])
-            progress_thread = threading.Thread(target=update_ui_with_progress, args=(process,))
-            progress_thread.start()
-            progress_thread.join()
-            print('\n')
+            process.communicate()
+
             if asset_type in ('material', 'decal'):
                 command = [python_path, utils_path, "--function", "crop_thumbnails", img_path,]
                 print(f"Running {command} inside the virtual environment...")
@@ -201,12 +211,11 @@ def load_assets_in_background(file_path,asset_type):
                 print(process.communicate()[0])
 
         # Load the asset into the preview collection
-        if img_path and os.path.exists(img_path):
-            pcoll.load(uid, img_path, 'IMAGE')
-            # Add the asset to the queue
-            asset_queue.put((asset_name, uid, img_path, pcoll[uid]))
-        else:
-            print(f"Image path {img_path} does not exist.")
+        if not os.path.exists(img_path):
+            img_path = preview_img
+
+        pcoll.load(uid, img_path, 'IMAGE')
+        asset_queue.put((asset_name, uid, img_path, pcoll[uid]))
 
     # Signal completion
     asset_queue.put(None)
@@ -481,30 +490,39 @@ class FILEBROWSER_PT_assets(bpy.types.Panel):
         row.operator("filebrowser.search_assets", text="", icon='VIEWZOOM')
 
         if self.assets:
-            row = layout.row()
-            # Calculate the number of columns based on the panel's width
-            min_width = 120  # Minimum width for a single column
-            columns_count = max(1, min(int(context.region.width / min_width), len(self.assets)))
-            column_list = [row.column(align=True) for _ in range(columns_count)]
+            if len(self.assets) == 0:
+                layout.label(text="No assets available. Try searching or refreshing.")
+            else:
+                row = layout.row()
+                # Calculate the number of columns based on the panel's width
+                min_width = 120  # Minimum width for a single column
+                columns_count = max(1, min(int(context.region.width / min_width), len(self.assets)))
+                column_list = [row.column(align=True) for _ in range(columns_count)]
 
-            for i, (uid, asset_data) in enumerate(self.assets.items()):
-                col = column_list[i % columns_count]
-                asset_box = col.box()
-                asset_box.scale_x = 1.0
-                asset_box.scale_y = 1.0
+                for i, (uid, asset_data) in enumerate(self.assets.items()):
+                    col = column_list[i % columns_count]
+                    asset_box = col.box()
+                    asset_box.scale_x = 1.0
+                    asset_box.scale_y = 1.0
 
-                preview = asset_data["preview"]
-                img_path = asset_data["img_path"]
-                asset_name = asset_data["asset_name"]
+                    preview = asset_data["preview"]
+                    img_path = asset_data["img_path"]
+                    asset_name = asset_data["asset_name"]
 
-                asset_box.template_icon(preview.icon_id, scale=5)
-                asset_box.label(text=asset_name, icon='BLANK1')
+                    if preview:
+                        asset_box.template_icon(preview.icon_id, scale=5)
+                    else:
+                        asset_box.template_icon(preview_collection["preview"].icon_id, scale=4)
 
-                # Add Import Button
-                import_btn = asset_box.operator("import_asset.import", text="Import")
-                import_btn.asset_name = asset_name
-                import_btn.uid = uid
-                import_btn.img_path = img_path if img_path else "No Image"
+                    asset_box.label(text=asset_name, icon='BLANK1')
+
+                    # Add Import Button
+                    import_btn = asset_box.operator("import_asset.import", text="Import")
+                    import_btn.asset_name = asset_name
+                    import_btn.uid = uid
+                    import_btn.img_path = img_path if img_path else "No Image"
+        else:
+            layout.label(text="Loading assets...")
 
         row = layout.row()
         row.operator("filebrowser.load_more", text="Load More")
@@ -728,6 +746,7 @@ def register():
     FILEBROWSER_PT_assets.assets = bpy.utils.previews.new()
     initialize_paths()
     setup_env()
+    initialize_preview_collection()
 
 
 def unregister():
@@ -742,6 +761,8 @@ def unregister():
     if FILEBROWSER_PT_assets.assets:
         bpy.utils.previews.remove(FILEBROWSER_PT_assets.assets)
         FILEBROWSER_PT_assets.assets = None
+
+    cleanup_preview_collection()
 
 
 if __name__ == "__main__":
