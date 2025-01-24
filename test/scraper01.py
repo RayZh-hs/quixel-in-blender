@@ -3,69 +3,44 @@ import os
 import subprocess
 import argparse
 import time
-
-# subprocess.check_call([sys.executable, "-m", "pip", "install", "--upgrade", "pip"])
-# subprocess.check_call([sys.executable, "-m", "pip", "install", "certifi"])
-# subprocess.check_call([sys.executable, "-m", "pip", "install", "charset-normalizer"])
-# subprocess.check_call([sys.executable, "-m", "pip", "install", "idna"])
-# subprocess.check_call([sys.executable, "-m", "pip", "install", "requests"])
-# subprocess.check_call([sys.executable, "-m", "pip", "install", "urllib3"])
-# subprocess.check_call([sys.executable, "-m", "pip", "install", "zstandard"])
-
-
-import requests
-# import zstandard as zstd
+import platform
+import cloudscraper
 import json
-
-#"X-CsrfToken": "l7r17rB8u2gNc7PNMEdFVyo27TvvoQaP",
-
-# url = "https://www.fab.com/i/listings/b69e0ad6-41a4-4f5a-97f4-e438e1b7709d/asset-formats"
-# url = "https://www.fab.com/i/listings/dc52417f-58a3-498b-bd02-e7264366d118/asset-formats"
-# url = "https://www.fab.com/i/listings/b69e0ad6-41a4-4f5a-97f4-e438e1b7709d/asset-formats/gltf/files/25408c1f-9229-4f06-9a17-413129d1b5f4/download-info/binary"
-# url = "https://www.fab.com/i/listings/search"
-# url = "https://www.fab.com/i/taxonomy/asset-format-groups"
-
-# Referer = "https://www.fab.com/listings/b69e0ad6-41a4-4f5a-97f4-e438e1b7709d"
-# Referer = "https://www.fab.com/listings/dc52417f-58a3-498b-bd02-e7264366d118"
-# Referer = "https://www.fab.com/listings/b69e0ad6-41a4-4f5a-97f4-e438e1b7709d"
-# Referer = "https://www.fab.com/sellers/Quixel"
-# Referer = "https://www.fab.com/sellers/Quixel?is_ai_generated=0&is_free=1&ui_filter_asset_formats=1&asset_formats=gltf&asset_formats=converted-files"
-
-
-# "listing_types":"3d-model"
-# "listing_types":"material",
-# "listing_types":"decal",
-# "q":"rock"
-
+import tempfile
 
 parser = argparse.ArgumentParser(description="Utility to get assets")
 parser.add_argument("--asset_type", type=str, required=True, help="asset type")
 parser.add_argument("--query", type=str, required=True, help="search query")
 args = parser.parse_args()
 
+tempdir = tempfile.gettempdir()
 
-payload = ""
 url = "https://www.fab.com/i/listings/search"
-# url = "https://www.fab.com/i/listings/83242895-3230-4b2d-a75b-09cab0a308b4/asset-formats"
-# url = "https://www.fab.com/i/listings/83242895-3230-4b2d-a75b-09cab0a308b4/asset-formats/gltf/files/d0f9c786-fd88-481d-a5f2-74da600b524b/download-info/binary"
+referer = "https://www.fab.com/sellers/Quixel"
 
-Referer = "https://www.fab.com/sellers/Quixel"
-# Referer = "https://www.fab.com/i/listings/83242895-3230-4b2d-a75b-09cab0a308b4"
+if platform.system() == 'Windows':
+    user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:134.0) Gecko/20100101 Firefox/134.0"
+else:
+    user_agent = "Mozilla/5.0 (X11; Linux x86_64; rv:134.0) Gecko/20100101 Firefox/134.0"
 
 headers = {
-    "User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:134.0) Gecko/20100101 Firefox/134.0",
     "Accept": "application/json, text/plain, */*",
-    "Accept-Language": "en",
     "Accept-Encoding": "gzip, deflate, br, zstd",
-    "Referer": Referer,
-    "X-Requested-With": "XMLHttpRequest",
-    "DNT": "1",
+    "Accept-Language": "en",
     "Alt-Used": "www.fab.com",
     "Connection": "keep-alive",
+    "Dnt": "1",
+    "Referer": referer,
     "Sec-Fetch-Dest": "empty",
     "Sec-Fetch-Mode": "cors",
     "Sec-Fetch-Site": "same-origin",
-    "Sec-GPC": "1"
+    "Sec-GPC": "1",
+    "User-Agent": user_agent,
+    "X-Requested-With": "XMLHttpRequest",
+    # Adding Client Hints
+    "Sec-CH-UA": '"Chromium";v="132", "Not A(Brand";v="99", "Google Chrome";v="132"',
+    "Sec-CH-UA-Mobile": "?0",
+    "Sec-CH-UA-Platform": "Windows"
 }
 
 
@@ -84,10 +59,8 @@ def fetch_and_save_assets():
         "q": query
     }
     print(querystring)
-    # response = requests.get(url, data=payload, headers=headers)
-    # response = requests.get(url, data=payload, headers=headers, params=querystring)
 
-    file_path = os.path.join("/tmp/", f"output_{asset_type}_{query}.json")
+    file_path = os.path.join(tempdir, f"output_{asset_type}_{query}.json")
 
     max_retries = 5  # Number of retries
     retry_delay = 2  # Delay in seconds between retries
@@ -95,7 +68,9 @@ def fetch_and_save_assets():
     for attempt in range(1, max_retries + 1):
         try:
             # Make the GET request
-            response = requests.get(url, data=payload, headers=headers, params=querystring)
+            # response = requests.get(url, data=payload, headers=headers, params=querystring)
+            scraper = cloudscraper.create_scraper()
+            response = scraper.get(url, headers=headers, params=querystring)
 
             if response.status_code == 200:
                 # Success: Process the response
@@ -133,4 +108,45 @@ def fetch_and_save_assets():
 
     print("All retry attempts failed. Exiting.")
 
+
 fetch_and_save_assets()
+
+
+
+
+
+
+
+
+# subprocess.check_call([sys.executable, "-m", "pip", "install", "--upgrade", "pip"])
+# subprocess.check_call([sys.executable, "-m", "pip", "install", "certifi"])
+# subprocess.check_call([sys.executable, "-m", "pip", "install", "charset-normalizer"])
+# subprocess.check_call([sys.executable, "-m", "pip", "install", "idna"])
+# subprocess.check_call([sys.executable, "-m", "pip", "install", "requests"])
+# subprocess.check_call([sys.executable, "-m", "pip", "install", "urllib3"])
+# subprocess.check_call([sys.executable, "-m", "pip", "install", "zstandard"])
+
+
+# import requests
+# # import zstandard as zstd
+# import json
+
+#"X-CsrfToken": "l7r17rB8u2gNc7PNMEdFVyo27TvvoQaP",
+
+# url = "https://www.fab.com/i/listings/b69e0ad6-41a4-4f5a-97f4-e438e1b7709d/asset-formats"
+# url = "https://www.fab.com/i/listings/dc52417f-58a3-498b-bd02-e7264366d118/asset-formats"
+# url = "https://www.fab.com/i/listings/b69e0ad6-41a4-4f5a-97f4-e438e1b7709d/asset-formats/gltf/files/25408c1f-9229-4f06-9a17-413129d1b5f4/download-info/binary"
+# url = "https://www.fab.com/i/listings/search"
+# url = "https://www.fab.com/i/taxonomy/asset-format-groups"
+
+# Referer = "https://www.fab.com/listings/b69e0ad6-41a4-4f5a-97f4-e438e1b7709d"
+# Referer = "https://www.fab.com/listings/dc52417f-58a3-498b-bd02-e7264366d118"
+# Referer = "https://www.fab.com/listings/b69e0ad6-41a4-4f5a-97f4-e438e1b7709d"
+# Referer = "https://www.fab.com/sellers/Quixel"
+# Referer = "https://www.fab.com/sellers/Quixel?is_ai_generated=0&is_free=1&ui_filter_asset_formats=1&asset_formats=gltf&asset_formats=converted-files"
+
+
+# "listing_types":"3d-model"
+# "listing_types":"material",
+# "listing_types":"decal",
+# "q":"rock"
