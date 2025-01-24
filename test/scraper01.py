@@ -53,7 +53,7 @@ Referer = "https://www.fab.com/sellers/Quixel"
 # Referer = "https://www.fab.com/i/listings/83242895-3230-4b2d-a75b-09cab0a308b4"
 
 headers = {
-    "User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:133.0) Gecko/20100101 Firefox/133.0",
+    "User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:134.0) Gecko/20100101 Firefox/134.0",
     "Accept": "application/json, text/plain, */*",
     "Accept-Language": "en",
     "Accept-Encoding": "gzip, deflate, br, zstd",
