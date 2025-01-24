@@ -1,27 +1,34 @@
 import argparse
 import json
 import os
-import requests
-import subprocess
-import sys
 import time
 from PIL import Image
+import cloudscraper
+import platform
 
-payload = ""
+
+if platform.system() == 'Windows':
+    user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:134.0) Gecko/20100101 Firefox/134.0"
+else:
+    user_agent = "Mozilla/5.0 (X11; Linux x86_64; rv:134.0) Gecko/20100101 Firefox/134.0"
 
 headers = {
-    "User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:134.0) Gecko/20100101 Firefox/134.0",
     "Accept": "application/json, text/plain, */*",
-    "Accept-Language": "en",
     "Accept-Encoding": "gzip, deflate, br, zstd",
-    "X-Requested-With": "XMLHttpRequest",
-    "DNT": "1",
+    "Accept-Language": "en",
     "Alt-Used": "www.fab.com",
     "Connection": "keep-alive",
+    "Dnt": "1",
     "Sec-Fetch-Dest": "empty",
     "Sec-Fetch-Mode": "cors",
     "Sec-Fetch-Site": "same-origin",
-    "Sec-GPC": "1"
+    "Sec-GPC": "1",
+    "User-Agent": user_agent,
+    "X-Requested-With": "XMLHttpRequest",
+    # Adding Client Hints
+    "Sec-CH-UA": '"Chromium";v="132", "Not A(Brand";v="99", "Google Chrome";v="132"',
+    "Sec-CH-UA-Mobile": "?0",
+    "Sec-CH-UA-Platform": "Windows"
 }
 
 querystring = {
@@ -82,14 +89,18 @@ def fetch_down_link(url, referer, data_dir, asset_uid=None):
 def fetcher(url, header, file_path, query=None):
     max_retries = 5  # Number of retries
     retry_delay = 2  # Delay in seconds between retries
+    # Create the cloudscraper instance
+    scraper = cloudscraper.create_scraper()
 
     for attempt in range(1, max_retries + 1):
         try:
             # Make the GET request
             if query:
-                response = requests.get(url, headers=header, params=query)
+                # response = requests.get(url, headers=header, params=query)
+                response = scraper.get(url, headers=headers, params=query)
             else:
-                response = requests.get(url, headers=header)
+                # response = requests.get(url, headers=header)
+                response = scraper.get(url, headers=headers)
 
             if response.status_code == 200:
                 # Success: Process the response
@@ -120,7 +131,16 @@ def fetcher(url, header, file_path, query=None):
                 print(f"Attempt {attempt}: Received HTTP {response.status_code}. Exiting.")
                 return
 
-        except requests.RequestException as e:
+        except cloudscraper.exceptions.CloudflareChallengeError as e:
+            print(f"Attempt {attempt}: Cloudflare challenge failed: {e}. Retrying in {retry_delay} seconds...")
+            time.sleep(retry_delay)
+            continue
+
+        except cloudscraper.exceptions.CloudflareCaptchaError as e:
+            print(f"Attempt {attempt}: Cloudflare CAPTCHA required: {e}. Unable to proceed.")
+            return
+
+        except Exception as e:
             print(f"Attempt {attempt}: Request failed with exception: {e}. Retrying in {retry_delay} seconds...")
             time.sleep(retry_delay)
             continue
@@ -130,7 +150,10 @@ def fetcher(url, header, file_path, query=None):
 
 def download_file(url, out_file):
     print("Downloading file...")
-    response = requests.get(url, stream=True)
+    # Create the cloudscraper instance
+    scraper = cloudscraper.create_scraper()
+    # response = requests.get(url, stream=True)
+    response = scraper.get(url, stream=True)
     response.raise_for_status()
 
     total_size = int(response.headers.get('content-length', 0))

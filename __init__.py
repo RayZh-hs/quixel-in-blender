@@ -29,16 +29,19 @@ preview_img = os.path.join(current_file_dir, "images", "preview.svg")
 
 def_asset_data_path = ""
 system_python = ""
+env_dir = ""
+python_path = ""
 
 if platform.system() == 'Windows':
     def_asset_data_path = os.path.join(os.getenv('USERPROFILE'), 'Documents')
     system_python = subprocess.check_output(['where', 'python3']).strip().decode('utf-8')
+    env_dir = os.path.join(def_asset_data_path, "fab-env")
+    python_path = os.path.join(env_dir, "Scripts", "python")
 else:
     def_asset_data_path = os.path.join(os.getenv('HOME'), 'Documents')
     system_python = subprocess.check_output(['which', 'python3']).strip().decode('utf-8')
-
-env_dir = os.path.join(def_asset_data_path, "fab-env")
-python_path = os.path.join(env_dir, "bin", "python")
+    env_dir = os.path.join(def_asset_data_path, "fab-env")
+    python_path = os.path.join(env_dir, "bin", "python")
 
 data_dir = os.path.join(def_asset_data_path, "fab_data")
 thumbnail_dir = os.path.join(data_dir, "thumbnails")
@@ -129,7 +132,7 @@ def setup_env():
         print(f"Creating virtual environment at {env_dir}")
         subprocess.check_call([system_python, "-m", "venv", env_dir])
         subprocess.check_call([python_path, "-m", "pip", "install", "--upgrade", "pip"])
-        subprocess.check_call([python_path, "-m", "pip", "install", "requests", "zstandard", "pillow"])
+        subprocess.check_call([python_path, "-m", "pip", "install", "requests", "cloudscraper", "zstandard", "pillow"])
 
 
 def initialize_preview_collection():
