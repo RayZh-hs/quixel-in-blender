@@ -680,12 +680,13 @@ class FILEBROWSER_OT_load_more(bpy.types.Operator):
     bl_label = "Load More"
 
     def execute(self, context):
-        bpy.context.window.cursor_set('WAIT')
         if cursors["next_cursor"] is not None:
+            bpy.context.window.cursor_set('WAIT')
             cursors["curr_cursor"] = cursors["next_cursor"]
             self.report({'INFO'}, "Loading more assets")
             update_assets(context, cursors["curr_cursor"])
-        self.report({'INFO'}, "Loading Assets List")
+        else:
+            self.report({'INFO'}, "No more assets to load")
         return {'FINISHED'}
 
 
