@@ -43,10 +43,11 @@ else:
     env_dir = os.path.join(def_asset_data_path, "fab-env")
     python_path = os.path.join(env_dir, "bin", "python")
 
+asset_lib_name = "Quixel Assets"
 data_dir = os.path.join(def_asset_data_path, "fab_data")
 thumbnail_dir = os.path.join(data_dir, "thumbnails")
-assets_dir = os.path.join(data_dir, "assets")
-json_dir = os.path.join(data_dir, "json")
+assets_dir = os.path.join(data_dir, "quixel_assets")
+json_dir = os.path.join(data_dir, "json_files")
 unzipped_assets_dir = os.path.join(assets_dir, "unzipped_assets")
 blender_files_dir = os.path.join(assets_dir, "blender_files")
 catalog_file = os.path.join(assets_dir, "blender_assets.cats.txt")
@@ -96,13 +97,15 @@ def initialize_paths():
 
     asset_library_paths = [library.path for library in bpy.context.preferences.filepaths.asset_libraries]
     if assets_dir not in asset_library_paths:
-        # bpy.ops.preferences.asset_library_add(directory=assets_dir)
         bpy.app.timers.register(add_asset_library, first_interval=1.0)
 
 
 def add_asset_library():
     try:
-        bpy.ops.preferences.asset_library_add(directory=assets_dir)
+        bpy.ops.preferences.asset_library_add()
+        asset_library = bpy.context.preferences.filepaths.asset_libraries[-1]
+        asset_library.name = asset_lib_name
+        asset_library.path = assets_dir
         print(f"Asset library added: {assets_dir}")
     except Exception as e:
         print(f"Failed to add asset library: {e}")
