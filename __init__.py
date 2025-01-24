@@ -93,7 +93,17 @@ def initialize_paths():
 
     asset_library_paths = [library.path for library in bpy.context.preferences.filepaths.asset_libraries]
     if assets_dir not in asset_library_paths:
+        # bpy.ops.preferences.asset_library_add(directory=assets_dir)
+        bpy.app.timers.register(add_asset_library, first_interval=1.0)
+
+
+def add_asset_library():
+    try:
         bpy.ops.preferences.asset_library_add(directory=assets_dir)
+        print(f"Asset library added: {assets_dir}")
+    except Exception as e:
+        print(f"Failed to add asset library: {e}")
+    return None  # Stop the timer
 
 
 def update_asset_data_path(self, context):
