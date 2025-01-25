@@ -7,7 +7,6 @@ import subprocess
 import threading
 from datetime import datetime, timezone
 import zipfile
-import tempfile
 import uuid
 import platform
 
@@ -27,6 +26,7 @@ utils_path = os.path.join(current_file_dir, "test", "utils.py")
 asset_importer_path = os.path.join(current_file_dir, "test", "asset_importer.py")
 preview_img = os.path.join(current_file_dir, "images", "preview.svg")
 
+def_blender_executable_path = bpy.app.binary_path
 def_asset_data_path = ""
 system_python = ""
 env_dir = ""
@@ -66,7 +66,7 @@ class AssetProcessorPreferences(bpy.types.AddonPreferences):
         name="Blender Executable Path",
         description="Path to the Blender executable",
         subtype='FILE_PATH',
-        default="",
+        default=def_blender_executable_path,
     )
 
     asset_data_path: bpy.props.StringProperty(
