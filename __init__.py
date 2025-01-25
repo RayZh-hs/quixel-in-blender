@@ -22,8 +22,8 @@ bl_info = {
 }
 
 current_file_dir = os.path.join(os.path.dirname(__file__))
-utils_path = os.path.join(current_file_dir, "test", "utils.py")
-asset_importer_path = os.path.join(current_file_dir, "test", "asset_importer.py")
+utils_path = os.path.join(current_file_dir, "tools", "utils.py")
+asset_importer_path = os.path.join(current_file_dir, "tools", "asset_importer.py")
 preview_img = os.path.join(current_file_dir, "images", "preview.svg")
 
 def_blender_executable_path = bpy.app.binary_path
