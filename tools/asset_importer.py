@@ -87,7 +87,7 @@ def import_and_mark_asset(base_path, asset_name, asset_path, asset_type, preview
 
 
     if asset_path.endswith(".zip"):
-        extract_path = os.path.join(unzipped_assets_dir, asset_name)
+        extract_path = os.path.join(unzipped_assets_dir, asset_name[:-4])
         ass_name = os.path.splitext(os.path.basename(asset_name))[0]
         blend_file_path = os.path.join(blender_files_dir, f"{ass_name}.blend")
 

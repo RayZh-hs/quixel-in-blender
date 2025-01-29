@@ -152,6 +152,17 @@ def cleanup_preview_collection():
         preview_collection = None
 
 
+def fix_asset_paths():
+    for item in os.listdir(unzipped_assets_dir):
+        if item and os.path.isdir(os.path.join(unzipped_assets_dir, item)):
+            if item.endswith(".zip"):
+                new_name = item[:-4]
+                old_path = os.path.join(unzipped_assets_dir, item)
+                new_path = os.path.join(unzipped_assets_dir, new_name)
+                os.rename(old_path, new_path)
+                print(f"Renamed folder: {item} -> {new_name}")
+
+
 def update_assets(context, cursor):
     global loading_thread
 
@@ -257,7 +268,7 @@ def import_to_scene(asset_name, asset_path, asset_type):
     print(asset_path)
 
     if asset_path.endswith(".zip"):
-        extract_path = os.path.join(unzipped_assets_dir, asset_name)
+        extract_path = os.path.join(unzipped_assets_dir, asset_name[:-4])
         # Check if the asset is already unzipped
         if not os.path.exists(extract_path):
             try:
@@ -764,6 +775,7 @@ def register():
     initialize_paths()
     setup_env()
     initialize_preview_collection()
+    fix_asset_paths()
 
 
 def unregister():
