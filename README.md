@@ -1,5 +1,10 @@
 
-## fab-to-blender
+### Disclaimer:
+
+Read fab [terms-of-service](https://www.fab.com/terms-of-service)
+
+Users are responsible for complying with all applicable terms and conditions.
+Additionally, any assets downloaded from Fab must be used in accordance with the specified terms and conditions.
 
 ### Requirements:
 - Install Latest python: <br>
