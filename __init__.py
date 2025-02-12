@@ -240,6 +240,13 @@ def load_assets_in_background(file_path,asset_type):
                 # print(result)
                 process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
                 print(process.communicate()[0])
+            if asset_type == '3d-model':
+                command = [python_path, utils_path, "--function", "smart_square_crop", img_path, ]
+                print(f"Running {command} inside the virtual environment...")
+                # result = subprocess.run(command, capture_output=True, text=True)
+                # print(result)
+                process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                print(process.communicate()[0])
 
         # Load the asset into the preview collection
         if not os.path.exists(img_path):
