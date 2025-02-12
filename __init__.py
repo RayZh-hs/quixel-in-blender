@@ -501,62 +501,76 @@ class FILEBROWSER_PT_assets(bpy.types.Panel):
         layout.alignment = "CENTER"
 
         row = layout.row(align=True)
-        row.operator("filebrowser.set_asset_type", text="3D Model", depress=context.scene.asset_type == '3d-model').asset_type = '3d-model'
-        row.operator("filebrowser.set_asset_type", text="Material", depress=context.scene.asset_type == 'material').asset_type = 'material'
-        # row.operator("filebrowser.set_asset_type", text="Decal", depress=context.scene.asset_type == 'decal').asset_type = 'decal'
+        row.operator("filebrowser.set_asset_mode", text="Online", depress=context.scene.asset_mode == 'online').asset_mode = 'online'
+        row.operator("filebrowser.set_asset_mode", text="Downloaded", depress=context.scene.asset_mode == 'downloaded').asset_mode = 'downloaded'
 
-        row = layout.row(align=True)
-        row.operator("filebrowser.set_import_type", text="Import To Scene", depress=context.scene.import_type == 'import_to_scene').import_type = 'import_to_scene'
-        row.operator("filebrowser.set_import_type", text="Add To Assets", depress=context.scene.import_type == 'add_to_asset_library').import_type = 'add_to_asset_library'
+        if context.scene.asset_mode == 'online':
+            box = layout.box()
+            row = box.row(align=True)
+            row.operator("filebrowser.set_asset_type", text="3D Model", depress=context.scene.asset_type == '3d-model').asset_type = '3d-model'
+            row.operator("filebrowser.set_asset_type", text="Material", depress=context.scene.asset_type == 'material').asset_type = 'material'
+            # row.operator("filebrowser.set_asset_type", text="Decal", depress=context.scene.asset_type == 'decal').asset_type = 'decal'
 
-        row = layout.row(align=True)
-        row.operator("filebrowser.set_import_size", text="raw", depress=context.scene.import_size == '0').import_size = '0'
-        row.operator("filebrowser.set_import_size", text="high", depress=context.scene.import_size == '1').import_size = '1'
-        row.operator("filebrowser.set_import_size", text="mid", depress=context.scene.import_size == '2').import_size = '2'
-        row.operator("filebrowser.set_import_size", text="low", depress=context.scene.import_size == '3').import_size = '3'
+            row = box.row(align=True)
+            row.operator("filebrowser.set_import_type", text="Import To Scene", depress=context.scene.import_type == 'import_to_scene').import_type = 'import_to_scene'
+            row.operator("filebrowser.set_import_type", text="Add To Assets", depress=context.scene.import_type == 'add_to_asset_library').import_type = 'add_to_asset_library'
 
-        # Search box and search button
-        row = layout.row()
-        row.prop(context.scene, "asset_search", text="")
-        row.operator("filebrowser.search_assets", text="", icon='VIEWZOOM')
+            row = box.row(align=True)
+            row.operator("filebrowser.set_import_size", text="raw", depress=context.scene.import_size == '0').import_size = '0'
+            row.operator("filebrowser.set_import_size", text="high", depress=context.scene.import_size == '1').import_size = '1'
+            row.operator("filebrowser.set_import_size", text="mid", depress=context.scene.import_size == '2').import_size = '2'
+            row.operator("filebrowser.set_import_size", text="low", depress=context.scene.import_size == '3').import_size = '3'
 
-        if self.assets:
-            if len(self.assets) == 0:
-                layout.label(text="No assets available. Try searching or refreshing.")
+            # Search box and search button
+            row = box.row(align=True)
+            row.prop(context.scene, "asset_search", text="")
+            row.operator("filebrowser.search_assets", text="", icon='VIEWZOOM')
+
+        # elif context.scene.asset_mode == 'downloaded':
+        #     box = layout.box()
+        #     box.label(text="Downloaded Assets UI Placeholder")
+
+            if self.assets:
+                if len(self.assets) == 0:
+                    layout.label(text="No assets available. Try searching or refreshing.")
+                else:
+                    row = box.row(align=True)
+                    # Calculate the number of columns based on the panel's width
+                    min_width = 120  # Minimum width for a single column
+                    columns_count = max(1, min(int(context.region.width / min_width), len(self.assets)))
+                    column_list = [row.column(align=True) for _ in range(columns_count)]
+
+                    for i, (uid, asset_data) in enumerate(self.assets.items()):
+                        col = column_list[i % columns_count]
+                        asset_box = col.box()
+                        asset_box.scale_x = 1.0
+                        asset_box.scale_y = 1.0
+
+                        preview = asset_data["preview"]
+                        img_path = asset_data["img_path"]
+                        asset_name = asset_data["asset_name"]
+
+                        if preview:
+                            asset_box.template_icon(preview.icon_id, scale=5)
+                        else:
+                            asset_box.template_icon(preview_collection["preview"].icon_id, scale=4)
+
+                        asset_box.label(text=asset_name, icon='BLANK1')
+
+                        # Add Import Button
+                        import_btn = asset_box.operator("import_asset.import", text="Import")
+                        import_btn.asset_name = asset_name
+                        import_btn.uid = uid
+                        import_btn.img_path = img_path if img_path else "No Image"
             else:
-                row = layout.row()
-                # Calculate the number of columns based on the panel's width
-                min_width = 120  # Minimum width for a single column
-                columns_count = max(1, min(int(context.region.width / min_width), len(self.assets)))
-                column_list = [row.column(align=True) for _ in range(columns_count)]
+                layout.label(text="Loading assets...")
 
-                for i, (uid, asset_data) in enumerate(self.assets.items()):
-                    col = column_list[i % columns_count]
-                    asset_box = col.box()
-                    asset_box.scale_x = 1.0
-                    asset_box.scale_y = 1.0
+            row = box.row(align=True)
+            row.operator("filebrowser.load_more", text="Load More")
 
-                    preview = asset_data["preview"]
-                    img_path = asset_data["img_path"]
-                    asset_name = asset_data["asset_name"]
-
-                    if preview:
-                        asset_box.template_icon(preview.icon_id, scale=5)
-                    else:
-                        asset_box.template_icon(preview_collection["preview"].icon_id, scale=4)
-
-                    asset_box.label(text=asset_name, icon='BLANK1')
-
-                    # Add Import Button
-                    import_btn = asset_box.operator("import_asset.import", text="Import")
-                    import_btn.asset_name = asset_name
-                    import_btn.uid = uid
-                    import_btn.img_path = img_path if img_path else "No Image"
-        else:
-            layout.label(text="Loading assets...")
-
-        row = layout.row()
-        row.operator("filebrowser.load_more", text="Load More")
+        elif context.scene.asset_mode == 'downloaded':
+            box = layout.box()
+            box.label(text="Downloaded Assets UI Placeholder")
 
 
 class IMPORT_ASSET_OT_import_asset(bpy.types.Operator):
@@ -705,6 +719,17 @@ class FILEBROWSER_OT_load_more(bpy.types.Operator):
         return {'FINISHED'}
 
 
+class FILEBROWSER_OT_set_asset_mode(bpy.types.Operator):
+    bl_idname = "filebrowser.set_asset_mode"
+    bl_label = "Set Asset Mode"
+
+    asset_mode: bpy.props.StringProperty()
+
+    def execute(self, context):
+        context.scene.asset_mode = self.asset_mode
+        return {'FINISHED'}
+
+
 class FILEBROWSER_OT_set_asset_type(bpy.types.Operator):
     bl_idname = "filebrowser.set_asset_type"
     bl_label = "Set Asset Type"
@@ -744,6 +769,7 @@ classes = [
     FILEBROWSER_OT_load_more,
     IMPORT_ASSET_OT_import_asset,
     FILEBROWSER_OT_search_assets,
+    FILEBROWSER_OT_set_asset_mode,
     FILEBROWSER_OT_set_asset_type,
     FILEBROWSER_OT_set_import_type,
     FILEBROWSER_OT_set_import_size,
@@ -758,6 +784,11 @@ def register():
     bpy.types.Scene.asset_search = bpy.props.StringProperty(
         name="Search Assets",
         update=FILEBROWSER_OT_search_assets.execute
+    )
+
+    bpy.types.Scene.asset_mode = bpy.props.StringProperty(
+        name="Asset Mode",
+        default='online'
     )
 
     bpy.types.Scene.asset_type = bpy.props.StringProperty(
@@ -787,6 +818,7 @@ def unregister():
         bpy.utils.unregister_class(cls)
 
     del bpy.types.Scene.asset_search
+    del bpy.types.Scene.asset_mode
     del bpy.types.Scene.asset_type
     del bpy.types.Scene.import_type
     del bpy.types.Scene.import_size
