@@ -553,12 +553,12 @@ class FILEBROWSER_PT_assets(bpy.types.Panel):
                         if preview:
                             asset_box.template_icon(preview.icon_id, scale=5)
                         else:
-                            asset_box.template_icon(preview_collection["preview"].icon_id, scale=4)
+                            asset_box.template_icon(preview_collection["preview"].icon_id, scale=5)
 
-                        asset_box.label(text=asset_name, icon='BLANK1')
+                        # asset_box.label(text=asset_name, icon='BLANK1')
 
                         # Add Import Button
-                        import_btn = asset_box.operator("import_asset.import", text="Import")
+                        import_btn = asset_box.operator("import_asset.import", text=asset_name, icon="IMPORT")
                         import_btn.asset_name = asset_name
                         import_btn.uid = uid
                         import_btn.img_path = img_path if img_path else "No Image"
