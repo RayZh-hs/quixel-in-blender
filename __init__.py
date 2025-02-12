@@ -5,7 +5,7 @@ import os
 import queue
 import subprocess
 import threading
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import zipfile
 import uuid
 import platform
@@ -172,7 +172,11 @@ def update_assets(context, cursor):
     # cursor = cursors["curr_cursor"].strip()
     file_path = os.path.join(json_dir, f"search_{asset_type}_{query}_{cursor}.json")
 
-    if not os.path.exists(file_path):
+    if os.path.exists(file_path):
+        time_difference = datetime.now() - datetime.fromtimestamp(os.path.getmtime(file_path))
+        print(f"last synced: {time_difference}")
+
+    if not os.path.exists(file_path) or time_difference > timedelta(hours=1):
         url = "https://www.fab.com/i/listings/search"
         referer = "https://www.fab.com/sellers/Quixel"
 
