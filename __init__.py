@@ -135,7 +135,7 @@ def setup_env():
         print(f"Creating virtual environment at {env_dir}")
         subprocess.check_call([system_python, "-m", "venv", env_dir])
         subprocess.check_call([python_path, "-m", "pip", "install", "--upgrade", "pip"])
-        subprocess.check_call([python_path, "-m", "pip", "install", "requests", "cloudscraper", "zstandard", "pillow"])
+        subprocess.check_call([python_path, "-m", "pip", "install", "requests", "cloudscraper", "zstandard", "pillow", "numpy"])
 
 
 def initialize_preview_collection():
