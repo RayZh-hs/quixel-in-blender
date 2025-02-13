@@ -3,7 +3,6 @@ import json
 import os
 import time
 from PIL import Image
-import numpy as np
 import cloudscraper
 import platform
 
@@ -62,60 +61,54 @@ def crop_thumbnails(image_path):
         cropped_image.save(f"{image_path}")
 
 
-def smart_square_crop(image_path):
+def smart_square_crop(image_path, border_width=40):
     image = Image.open(image_path).convert("RGB")
     width, height = image.size
-    target_color = np.array([32, 32, 32])
+    target_color = (32, 32, 32)
+    pixels = image.load()
 
-    image_np = np.array(image)
-
-    top = 0
-    bottom = height
-    left = 0
-    right = width
+    top, bottom, left, right = 0, height, 0, width
 
     # Scan from top
     for y in range(height):
-        row = image_np[y, :, :]
-        if not np.all(row == target_color):
+        if any(pixels[x, y] != target_color for x in range(width)):
             top = y
             break
 
     # Scan from bottom
     for y in range(height - 1, -1, -1):
-        row = image_np[y, :, :]
-        if not np.all(row == target_color):
+        if any(pixels[x, y] != target_color for x in range(width)):
             bottom = y + 1
             break
 
     # Scan from left
     for x in range(width):
-        col = image_np[:, x, :]
-        if not np.all(col == target_color):
+        if any(pixels[x, y] != target_color for y in range(height)):
             left = x
             break
 
     # Scan from right
     for x in range(width - 1, -1, -1):
-        col = image_np[:, x, :]
-        if not np.all(col == target_color):
+        if any(pixels[x, y] != target_color for y in range(height)):
             right = x + 1
             break
 
+    # Apply border
+    top = max(0, top - border_width)
+    bottom = min(height, bottom + border_width)
+    left = max(0, left - border_width)
+    right = min(width, right + border_width)
+
     cropped_width = right - left
     cropped_height = bottom - top
-
-    new_size = max(cropped_width, cropped_height)  # Determine the largest dimension
-
-    # Calculate cropping offsets to maintain square and center
+    new_size = max(cropped_width, cropped_height)
     left_offset = (new_size - cropped_width) // 2
     top_offset = (new_size - cropped_height) // 2
 
-    # Create a new image with the target color
-    new_image = Image.new("RGB", (new_size, new_size), tuple(target_color))
-
-    # Paste the cropped image onto the center of the new image
-    new_image.paste(Image.fromarray(image_np[top:bottom, left:right, :]), (left_offset, top_offset))
+    # Create a new square image with the target color
+    new_image = Image.new("RGB", (new_size, new_size), target_color)
+    cropped = image.crop((left, top, right, bottom))
+    new_image.paste(cropped, (left_offset, top_offset))
 
     new_image.save(image_path)
 

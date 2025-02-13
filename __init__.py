@@ -56,6 +56,7 @@ asset_queue = queue.Queue()
 loading_thread = None
 cursors = {"curr_cursor": "0", "next_cursor": "0"}
 preview_collection = None
+cancel_loading = False
 
 
 class AssetProcessorPreferences(bpy.types.AddonPreferences):
@@ -135,7 +136,7 @@ def setup_env():
         print(f"Creating virtual environment at {env_dir}")
         subprocess.check_call([system_python, "-m", "venv", env_dir])
         subprocess.check_call([python_path, "-m", "pip", "install", "--upgrade", "pip"])
-        subprocess.check_call([python_path, "-m", "pip", "install", "requests", "cloudscraper", "zstandard", "pillow", "numpy"])
+        subprocess.check_call([python_path, "-m", "pip", "install", "requests", "cloudscraper", "zstandard", "pillow"])
 
 
 def initialize_preview_collection():
@@ -161,6 +162,14 @@ def fix_asset_paths():
                 new_path = os.path.join(unzipped_assets_dir, new_name)
                 os.rename(old_path, new_path)
                 print(f"Renamed folder: {item} -> {new_name}")
+
+
+def clear_thumbnail_cache():
+    for item in os.listdir(thumbnail_dir):
+        thumbnail = os.path.join(thumbnail_dir, item)
+        if item and os.path.isfile(thumbnail):
+            os.remove(thumbnail)
+            print(f"Removed thumbnail: {thumbnail}")
 
 
 def update_assets(context, cursor):
@@ -193,7 +202,9 @@ def update_assets(context, cursor):
         loading_thread.join()
 
     # Clear old assets and start a new thread
-    # FILEBROWSER_PT_assets.assets = None
+    # if preview_collection:
+    #     preview_collection.clear()
+    FILEBROWSER_PT_assets.assets = {}
     loading_thread = threading.Thread(target=load_assets_in_background, args=(file_path,asset_type,))
     loading_thread.start()
 
@@ -202,7 +213,7 @@ def update_assets(context, cursor):
 
 
 def load_assets_in_background(file_path,asset_type):
-    pcoll = bpy.utils.previews.new()
+    global preview_collection, cancel_loading
 
     with open(file_path, 'r') as f:
         data = json.load(f)
@@ -213,6 +224,30 @@ def load_assets_in_background(file_path,asset_type):
     results_data = data.get("results", [])
 
     for item in results_data:
+        if cancel_loading:
+            print("Loading cancelled.")
+            return  # Stop loading immediately
+        asset_category = item["category"]["name"]
+        if asset_category == "Plants":
+            continue
+        asset_name = item.get("title", "")
+        uid = item.get("uid", "")
+        img_path = preview_img  # Set temporary placeholder
+        # Ensure the UID is unique before loading
+        if uid in preview_collection:
+            del preview_collection[uid]
+        # Load temporary preview into preview collection
+        preview_collection.load(uid, img_path, 'IMAGE')
+
+        # Push to queue immediately
+        asset_queue.put((asset_name, uid, img_path, preview_collection[uid]))
+
+    bpy.app.timers.register(update_ui_from_queue)
+
+    for item in results_data:
+        if cancel_loading:
+            print("Loading cancelled.")
+            return  # Stop loading immediately
         asset_category = item["category"]["name"]
         if asset_category == "Plants":
             continue
@@ -252,17 +287,17 @@ def load_assets_in_background(file_path,asset_type):
         if not os.path.exists(img_path):
             img_path = preview_img
 
-        pcoll.load(uid, img_path, 'IMAGE')
-        asset_queue.put((asset_name, uid, img_path, pcoll[uid]))
+        if uid in preview_collection:
+            del preview_collection[uid]
+
+        preview_collection.load(uid, img_path, 'IMAGE')
+        asset_queue.put((asset_name, uid, img_path, preview_collection[uid]))
 
     # Signal completion
     asset_queue.put(None)
 
 
 def update_ui_from_queue():
-    if FILEBROWSER_PT_assets.assets is None:
-        FILEBROWSER_PT_assets.assets = bpy.utils.previews.new()
-
     while not asset_queue.empty():
         item = asset_queue.get()
         if item is None:  # Stop signal
@@ -501,7 +536,7 @@ class FILEBROWSER_PT_assets(bpy.types.Panel):
     bl_region_type = 'UI'
     bl_category = 'Quixel'
 
-    assets = None
+    assets = {}
 
     def draw(self, context):
         layout = self.layout
@@ -559,8 +594,8 @@ class FILEBROWSER_PT_assets(bpy.types.Panel):
 
                         if preview:
                             asset_box.template_icon(preview.icon_id, scale=5)
-                        else:
-                            asset_box.template_icon(preview_collection["preview"].icon_id, scale=5)
+                        # else:
+                        #     asset_box.template_icon(preview_collection["preview"].icon_id, scale=5)
 
                         # asset_box.label(text=asset_name, icon='BLANK1')
 
@@ -703,9 +738,15 @@ class FILEBROWSER_OT_search_assets(bpy.types.Operator):
     bl_label = "Search Assets"
 
     def execute(self, context):
+        global cancel_loading, loading_thread
+
+        cancel_loading = True
+        if loading_thread and loading_thread.is_alive():
+            loading_thread.join()  # Wait for it to stop
+        cancel_loading = False
+
         bpy.context.window.cursor_set('WAIT')
         cursor = "0"
-        FILEBROWSER_PT_assets.assets = None
         update_assets(context, cursor)
         self.report({'INFO'}, "Loading Assets List")
         return {'FINISHED'}
@@ -716,6 +757,13 @@ class FILEBROWSER_OT_load_more(bpy.types.Operator):
     bl_label = "Load More"
 
     def execute(self, context):
+        global cancel_loading, loading_thread
+
+        cancel_loading = True
+        if loading_thread and loading_thread.is_alive():
+            loading_thread.join()  # Wait for it to stop
+        cancel_loading = False
+
         if cursors["next_cursor"] is not None:
             bpy.context.window.cursor_set('WAIT')
             cursors["curr_cursor"] = cursors["next_cursor"]
@@ -744,6 +792,13 @@ class FILEBROWSER_OT_set_asset_type(bpy.types.Operator):
     asset_type: bpy.props.StringProperty()
 
     def execute(self, context):
+        global cancel_loading, loading_thread
+
+        cancel_loading = True
+        if loading_thread and loading_thread.is_alive():
+            loading_thread.join()  # Wait for it to stop
+        cancel_loading = False
+
         context.scene.asset_type = self.asset_type
         bpy.ops.filebrowser.search_assets()
         return {'FINISHED'}
@@ -813,11 +868,12 @@ def register():
         default='2'
     )
 
-    FILEBROWSER_PT_assets.assets = bpy.utils.previews.new()
+    FILEBROWSER_PT_assets.assets = {}
     initialize_paths()
     setup_env()
     initialize_preview_collection()
     fix_asset_paths()
+    # clear_thumbnail_cache()
 
 
 def unregister():
@@ -829,10 +885,6 @@ def unregister():
     del bpy.types.Scene.asset_type
     del bpy.types.Scene.import_type
     del bpy.types.Scene.import_size
-
-    if FILEBROWSER_PT_assets.assets:
-        bpy.utils.previews.remove(FILEBROWSER_PT_assets.assets)
-        FILEBROWSER_PT_assets.assets = None
 
     cleanup_preview_collection()
 
