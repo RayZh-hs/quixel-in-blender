@@ -315,8 +315,10 @@ def update_ui_from_queue():
 
 
 def force_ui_refresh():
-    """Force a UI refresh by calling redraw_timer."""
-    bpy.ops.wm.redraw_timer(type='DRAW_WIN_SWAP', iterations=1)
+    """Force a UI refresh by tagging all areas for redraw."""
+    for window in bpy.context.window_manager.windows:
+        for area in window.screen.areas:
+            area.tag_redraw()
     return None  # Stop the timer
 
 
