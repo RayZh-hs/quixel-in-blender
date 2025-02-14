@@ -296,7 +296,7 @@ def update_ui_from_queue():
 
         if item is None:  # Stop signal
             print("Asset loading complete.")
-            bpy.context.window.cursor_set('DEFAULT')
+            # bpy.context.window.cursor_set('DEFAULT')
             return None
 
         asset_name, uid, img_path = item
@@ -746,7 +746,7 @@ class FILEBROWSER_OT_search_assets(bpy.types.Operator):
             loading_thread.join()  # Wait for it to stop
         cancel_loading = False
 
-        bpy.context.window.cursor_set('WAIT')
+        # bpy.context.window.cursor_set('WAIT')
         cursor = "0"
         update_assets(context, cursor)
         self.report({'INFO'}, "Loading Assets List")
@@ -766,7 +766,7 @@ class FILEBROWSER_OT_load_more(bpy.types.Operator):
         cancel_loading = False
 
         if cursors["next_cursor"] is not None:
-            bpy.context.window.cursor_set('WAIT')
+            # bpy.context.window.cursor_set('WAIT')
             cursors["curr_cursor"] = cursors["next_cursor"]
             self.report({'INFO'}, "Loading more assets")
             update_assets(context, cursors["curr_cursor"])
