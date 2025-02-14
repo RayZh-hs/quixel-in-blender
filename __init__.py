@@ -116,7 +116,6 @@ def add_asset_library():
 def update_asset_data_path(self, context):
     global data_dir, thumbnail_dir, assets_dir, json_dir, unzipped_assets_dir, blender_files_dir, catalog_file
 
-    # Update paths based on the new asset_data_path
     data_dir = os.path.join(self.asset_data_path, "fab_data")
     thumbnail_dir = os.path.join(data_dir, "thumbnails")
     assets_dir = os.path.join(data_dir, "assets")
@@ -173,12 +172,24 @@ def clear_thumbnail_cache():
 
 
 def update_assets(context, cursor):
-    global loading_thread
+    global loading_thread, preview_collection, asset_queue, cancel_loading
+
+    cancel_loading = True
+    if loading_thread and loading_thread.is_alive():
+        loading_thread.join()  # Wait for the thread to stop
+        print("Stopping existing loading thread...")
+    cancel_loading = False
+
+    with asset_queue.mutex:  # Ensure thread-safe access to the queue
+        asset_queue.queue.clear()
+
+    if preview_collection:
+        preview_collection.clear()
+    FILEBROWSER_PT_assets.assets = {}
 
     asset_type = str(context.scene.asset_type).strip()
     print(asset_type)
     query = context.scene.asset_search.strip()
-    # cursor = cursors["curr_cursor"].strip()
     file_path = os.path.join(json_dir, f"search_{asset_type}_{query}_{cursor}.json")
 
     if os.path.exists(file_path):
@@ -191,20 +202,9 @@ def update_assets(context, cursor):
 
         command = [python_path, utils_path, "--function", "fetch_assets", url, referer, json_dir, asset_type, query, cursor,]
         print(f"Running {command} inside the virtual environment...")
-        # result = subprocess.run(command, capture_output=True, text=True)
-        # print(result)
         process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         print(process.communicate()[0])
 
-    # Stop any existing thread
-    if loading_thread and loading_thread.is_alive():
-        print("Stopping existing loading thread...")
-        loading_thread.join()
-
-    # Clear old assets and start a new thread
-    # if preview_collection:
-    #     preview_collection.clear()
-    FILEBROWSER_PT_assets.assets = {}
     loading_thread = threading.Thread(target=load_assets_in_background, args=(file_path,asset_type,))
     loading_thread.start()
 
@@ -213,7 +213,7 @@ def update_assets(context, cursor):
 
 
 def load_assets_in_background(file_path,asset_type):
-    global preview_collection, cancel_loading
+    global cancel_loading, asset_queue
 
     with open(file_path, 'r') as f:
         data = json.load(f)
@@ -233,14 +233,8 @@ def load_assets_in_background(file_path,asset_type):
         asset_name = item.get("title", "")
         uid = item.get("uid", "")
         img_path = preview_img  # Set temporary placeholder
-        # Ensure the UID is unique before loading
-        if uid in preview_collection:
-            del preview_collection[uid]
-        # Load temporary preview into preview collection
-        preview_collection.load(uid, img_path, 'IMAGE')
 
-        # Push to queue immediately
-        asset_queue.put((asset_name, uid, img_path, preview_collection[uid]))
+        asset_queue.put((asset_name, uid, img_path))
 
     bpy.app.timers.register(update_ui_from_queue)
 
@@ -262,7 +256,6 @@ def load_assets_in_background(file_path,asset_type):
 
         # Download the image if not already present
         if img_url and not os.path.exists(img_path):
-            # subprocess.check_call(["curl", "-o", img_path, img_url])
             command = [python_path, utils_path, "--function", "download_file", img_url, img_path]
             print(f"Running {command} inside the virtual environment...")
             process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
@@ -271,42 +264,60 @@ def load_assets_in_background(file_path,asset_type):
             if asset_type in ('material', 'decal'):
                 command = [python_path, utils_path, "--function", "crop_thumbnails", img_path,]
                 print(f"Running {command} inside the virtual environment...")
-                # result = subprocess.run(command, capture_output=True, text=True)
-                # print(result)
                 process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
                 print(process.communicate()[0])
+
             if asset_type == '3d-model':
                 command = [python_path, utils_path, "--function", "smart_square_crop", img_path, ]
                 print(f"Running {command} inside the virtual environment...")
-                # result = subprocess.run(command, capture_output=True, text=True)
-                # print(result)
                 process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
                 print(process.communicate()[0])
 
-        # Load the asset into the preview collection
         if not os.path.exists(img_path):
             img_path = preview_img
 
-        if uid in preview_collection:
-            del preview_collection[uid]
+        asset_queue.put((asset_name, uid, img_path))
 
-        preview_collection.load(uid, img_path, 'IMAGE')
-        asset_queue.put((asset_name, uid, img_path, preview_collection[uid]))
+        # bpy.app.timers.register(force_ui_refresh, first_interval=0.01)
 
     # Signal completion
     asset_queue.put(None)
 
 
 def update_ui_from_queue():
+    global asset_queue, preview_collection, cancel_loading
+
     while not asset_queue.empty():
+        if cancel_loading:  # Exit early if loading is cancelled
+            print("UI update cancelled.")
+            return None
+
         item = asset_queue.get()
+
         if item is None:  # Stop signal
             print("Asset loading complete.")
             bpy.context.window.cursor_set('DEFAULT')
             return None
-        asset_name, uid, img_path, asset = item  # Ensure the queue holds correct values
+
+        asset_name, uid, img_path = item
+
+        if uid in preview_collection:
+            del preview_collection[uid]
+        preview_collection.load(uid, img_path, 'IMAGE')
+
+        asset = preview_collection[uid]
+
         FILEBROWSER_PT_assets.assets[uid] = {"preview": asset, "img_path": img_path, "asset_name": asset_name}
+
+        bpy.app.timers.register(force_ui_refresh, first_interval=0.01)
+
     return 0.1
+
+
+def force_ui_refresh():
+    """Force a UI refresh by calling redraw_timer."""
+    bpy.ops.wm.redraw_timer(type='DRAW_WIN_SWAP', iterations=1)
+    return None  # Stop the timer
 
 
 def import_to_scene(asset_name, asset_path, asset_type):
@@ -568,11 +579,11 @@ class FILEBROWSER_PT_assets(bpy.types.Panel):
             row.prop(context.scene, "asset_search", text="")
             row.operator("filebrowser.search_assets", text="", icon='VIEWZOOM')
 
-        # elif context.scene.asset_mode == 'downloaded':
-        #     box = layout.box()
-        #     box.label(text="Downloaded Assets UI Placeholder")
-
             if self.assets:
+                if cancel_loading:
+                    print("Loading cancelled.")
+                    layout.label(text="Loading Cancelled.")
+                    return
                 if len(self.assets) == 0:
                     layout.label(text="No assets available. Try searching or refreshing.")
                 else:
@@ -594,10 +605,6 @@ class FILEBROWSER_PT_assets(bpy.types.Panel):
 
                         if preview:
                             asset_box.template_icon(preview.icon_id, scale=5)
-                        # else:
-                        #     asset_box.template_icon(preview_collection["preview"].icon_id, scale=5)
-
-                        # asset_box.label(text=asset_name, icon='BLANK1')
 
                         # Add Import Button
                         import_btn = asset_box.operator("import_asset.import", text=asset_name, icon="IMPORT")
@@ -640,8 +647,6 @@ class IMPORT_ASSET_OT_import_asset(bpy.types.Operator):
 
             command = [python_path, utils_path, "--function", "fetch_asset_formats", url, referer, json_dir, self.uid]
             print(f"Running {command} inside the virtual environment...")
-            # result = subprocess.run(command, capture_output=True, text=True)
-            # print(result)
             process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
             print(process.communicate()[0])
 
@@ -682,16 +687,12 @@ class IMPORT_ASSET_OT_import_asset(bpy.types.Operator):
 
                     command = [python_path, utils_path, "--function", "fetch_down_link", url, referer, json_dir, asset_uid]
                     print(f"Running {command} inside the virtual environment...")
-                    # result = subprocess.run(command, capture_output=True, text=True)
-                    # print(result)
                     process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
                     print(process.communicate()[0])
 
                 with open(down_link_file, "r") as f:
                     data = json.load(f)
                     down_link = data["downloadInfo"][0]["downloadUrl"]
-                # subprocess.check_call(["curl", "-o", asset_path, down_link])
-                # subprocess.check_call(["aria2c", "--dir", assets_dir, "--out", asset_name, down_link])
 
                 command = [python_path, utils_path, "--function", "download_file", down_link, asset_path]
                 print(f"Running {command} inside the virtual environment...")
@@ -792,12 +793,16 @@ class FILEBROWSER_OT_set_asset_type(bpy.types.Operator):
     asset_type: bpy.props.StringProperty()
 
     def execute(self, context):
-        global cancel_loading, loading_thread
+        global cancel_loading, loading_thread, asset_queue
 
         cancel_loading = True
         if loading_thread and loading_thread.is_alive():
             loading_thread.join()  # Wait for it to stop
         cancel_loading = False
+
+        # Clear the asset queue to prevent old assets from being processed
+        with asset_queue.mutex:  # Ensure thread-safe access to the queue
+            asset_queue.queue.clear()
 
         context.scene.asset_type = self.asset_type
         bpy.ops.filebrowser.search_assets()
