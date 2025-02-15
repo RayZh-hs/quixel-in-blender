@@ -51,6 +51,7 @@ json_dir = os.path.join(data_dir, "json_files")
 unzipped_assets_dir = os.path.join(assets_dir, "unzipped_assets")
 blender_files_dir = os.path.join(assets_dir, "blender_files")
 catalog_file = os.path.join(assets_dir, "blender_assets.cats.txt")
+downloaded_assets_file = os.path.join(assets_dir, "downloaded_assets.json")
 
 asset_queue = queue.Queue()
 loading_thread = None
@@ -114,7 +115,7 @@ def add_asset_library():
 
 
 def update_asset_data_path(self, context):
-    global data_dir, thumbnail_dir, assets_dir, json_dir, unzipped_assets_dir, blender_files_dir, catalog_file
+    global data_dir, thumbnail_dir, assets_dir, json_dir, unzipped_assets_dir, blender_files_dir, catalog_file, downloaded_assets_file
 
     data_dir = os.path.join(self.asset_data_path, "fab_data")
     thumbnail_dir = os.path.join(data_dir, "thumbnails")
@@ -123,6 +124,7 @@ def update_asset_data_path(self, context):
     unzipped_assets_dir = os.path.join(assets_dir, "unzipped_assets")
     blender_files_dir = os.path.join(assets_dir, "blender_files")
     catalog_file = os.path.join(assets_dir, "blender_assets.cats.txt")
+    downloaded_assets_file = os.path.join(assets_dir, "downloaded_assets.json")
 
     # Reinitialize directories
     initialize_paths()
@@ -143,6 +145,13 @@ def initialize_preview_collection():
     if not preview_collection:
         preview_collection = bpy.utils.previews.new()
         preview_collection.load("preview", preview_img, 'IMAGE')
+
+    # Load thumbnails for downloaded assets
+    downloaded_assets = load_downloaded_assets()
+    for uid, asset_data in downloaded_assets.items():
+        thumbnail_path = asset_data["thumbnail_image"]
+        if os.path.exists(thumbnail_path):
+            preview_collection.load(uid, thumbnail_path, 'IMAGE')
 
 
 def cleanup_preview_collection():
@@ -171,21 +180,45 @@ def clear_thumbnail_cache():
             print(f"Removed thumbnail: {thumbnail}")
 
 
+def load_downloaded_assets():
+    """Load the downloaded assets from the JSON file."""
+    if os.path.exists(downloaded_assets_file):
+        with open(downloaded_assets_file, 'r') as f:
+            return json.load(f)
+    return {}
+
+
+def save_downloaded_assets(assets):
+    """Save the downloaded assets to the JSON file."""
+    with open(downloaded_assets_file, 'w') as f:
+        json.dump(assets, f, indent=4)
+
+
+def add_downloaded_asset(asset_uid, asset_name, asset_type, asset_path, asset_import_size, thumbnail_image):
+    """Add a new downloaded asset to the JSON file."""
+    assets = load_downloaded_assets()
+    assets[asset_uid] = {
+        "asset_name": asset_name,
+        "asset_type": asset_type,
+        "asset_path": asset_path,
+        "asset_import_size": asset_import_size,
+        "thumbnail_image": thumbnail_image,
+        "timestamp": datetime.now().isoformat()
+    }
+    save_downloaded_assets(assets)
+
+
+def filter_downloaded_assets(assets, asset_type, import_size):
+    """Filter downloaded assets based on type and import size."""
+    filtered_assets = {}
+    for uid, asset_data in assets.items():
+        if asset_data["asset_type"] == asset_type and str(asset_data["asset_import_size"]) == import_size:
+            filtered_assets[uid] = asset_data
+    return filtered_assets
+
+
 def update_assets(context, cursor):
-    global loading_thread, preview_collection, asset_queue, cancel_loading
-
-    cancel_loading = True
-    if loading_thread and loading_thread.is_alive():
-        loading_thread.join()  # Wait for the thread to stop
-        print("Stopping existing loading thread...")
-    cancel_loading = False
-
-    with asset_queue.mutex:  # Ensure thread-safe access to the queue
-        asset_queue.queue.clear()
-
-    if preview_collection:
-        preview_collection.clear()
-    FILEBROWSER_PT_assets.assets = {}
+    global loading_thread
 
     asset_type = str(context.scene.asset_type).strip()
     print(asset_type)
@@ -278,8 +311,6 @@ def load_assets_in_background(file_path,asset_type):
 
         asset_queue.put((asset_name, uid, img_path))
 
-        # bpy.app.timers.register(force_ui_refresh, first_interval=0.01)
-
     # Signal completion
     asset_queue.put(None)
 
@@ -327,7 +358,7 @@ def import_to_scene(asset_name, asset_path, asset_type):
     print(asset_path)
 
     if asset_path.endswith(".zip"):
-        extract_path = os.path.join(unzipped_assets_dir, asset_name[:-4])
+        extract_path = os.path.join(unzipped_assets_dir, os.path.splitext(os.path.basename(asset_name))[0])
         # Check if the asset is already unzipped
         if not os.path.exists(extract_path):
             try:
@@ -564,17 +595,16 @@ class FILEBROWSER_PT_assets(bpy.types.Panel):
             row = box.row(align=True)
             row.operator("filebrowser.set_asset_type", text="3D Model", depress=context.scene.asset_type == '3d-model').asset_type = '3d-model'
             row.operator("filebrowser.set_asset_type", text="Material", depress=context.scene.asset_type == 'material').asset_type = 'material'
-            # row.operator("filebrowser.set_asset_type", text="Decal", depress=context.scene.asset_type == 'decal').asset_type = 'decal'
-
-            row = box.row(align=True)
-            row.operator("filebrowser.set_import_type", text="Import To Scene", depress=context.scene.import_type == 'import_to_scene').import_type = 'import_to_scene'
-            row.operator("filebrowser.set_import_type", text="Add To Assets", depress=context.scene.import_type == 'add_to_asset_library').import_type = 'add_to_asset_library'
 
             row = box.row(align=True)
             row.operator("filebrowser.set_import_size", text="raw", depress=context.scene.import_size == '0').import_size = '0'
             row.operator("filebrowser.set_import_size", text="high", depress=context.scene.import_size == '1').import_size = '1'
             row.operator("filebrowser.set_import_size", text="mid", depress=context.scene.import_size == '2').import_size = '2'
             row.operator("filebrowser.set_import_size", text="low", depress=context.scene.import_size == '3').import_size = '3'
+
+            row = box.row(align=True)
+            row.operator("filebrowser.set_import_type", text="Import To Scene", depress=context.scene.import_type == 'import_to_scene').import_type = 'import_to_scene'
+            row.operator("filebrowser.set_import_type", text="Add To Assets", depress=context.scene.import_type == 'add_to_asset_library').import_type = 'add_to_asset_library'
 
             # Search box and search button
             row = box.row(align=True)
@@ -621,7 +651,62 @@ class FILEBROWSER_PT_assets(bpy.types.Panel):
 
         elif context.scene.asset_mode == 'downloaded':
             box = layout.box()
-            box.label(text="Downloaded Assets UI Placeholder")
+            downloaded_assets = load_downloaded_assets()
+
+            # Filter assets based on selected type and import size
+            asset_type = context.scene.downloaded_asset_type
+            import_size = context.scene.downloaded_import_size
+            filtered_assets = filter_downloaded_assets(downloaded_assets, asset_type, import_size)
+
+            # Add asset type selection buttons
+            row = box.row(align=True)
+            row.operator("filebrowser.set_downloaded_asset_type", text="3D Model", depress=asset_type == '3d-model').asset_type = '3d-model'
+            row.operator("filebrowser.set_downloaded_asset_type", text="Material", depress=asset_type == 'material').asset_type = 'material'
+
+            # Add import size selection buttons
+            row = box.row(align=True)
+            row.operator("filebrowser.set_downloaded_import_size", text="raw", depress=import_size == '0').import_size = '0'
+            row.operator("filebrowser.set_downloaded_import_size", text="high", depress=import_size == '1').import_size = '1'
+            row.operator("filebrowser.set_downloaded_import_size", text="mid", depress=import_size == '2').import_size = '2'
+            row.operator("filebrowser.set_downloaded_import_size", text="low", depress=import_size == '3').import_size = '3'
+
+            # Add import method selection buttons
+            row = box.row(align=True)
+            row.operator("filebrowser.set_downloaded_import_method", text="Import To Scene", depress=context.scene.downloaded_import_method == 'import_to_scene').import_method = 'import_to_scene'
+            row.operator("filebrowser.set_downloaded_import_method", text="Add To Assets", depress=context.scene.downloaded_import_method == 'add_to_asset_library').import_method = 'add_to_asset_library'
+
+            if filtered_assets:
+                row = box.row(align=True)
+                # Calculate the number of columns based on the panel's width
+                min_width = 120  # Minimum width for a single column
+                columns_count = max(1, min(int(context.region.width / min_width), len(filtered_assets)))
+                column_list = [row.column(align=True) for _ in range(columns_count)]
+
+                for i, (uid, asset_data) in enumerate(filtered_assets.items()):
+                    col = column_list[i % columns_count]
+                    asset_box = col.box()
+                    asset_box.scale_x = 1.0
+                    asset_box.scale_y = 1.0
+
+                    # Load the thumbnail
+                    thumbnail_path = asset_data["thumbnail_image"]
+                    if os.path.exists(thumbnail_path):
+                        preview = preview_collection.get(uid)
+                        if not preview:
+                            preview_collection.load(uid, thumbnail_path, 'IMAGE')
+                        preview = preview_collection[uid]
+                        asset_box.template_icon(preview.icon_id, scale=5)
+
+                    # Add Import Button
+                    import_btn = asset_box.operator("import_downloaded_asset.import", text=asset_data["asset_name"], icon="IMPORT")
+                    import_btn.asset_uid = uid
+                    import_btn.asset_name = os.path.basename(asset_data["asset_path"])
+                    import_btn.asset_type = asset_data["asset_type"]
+                    import_btn.asset_path = asset_data["asset_path"]
+                    import_btn.thumbnail_path = thumbnail_path
+                    import_btn.import_method = context.scene.downloaded_import_method
+            else:
+                box.label(text="No downloaded assets found.")
 
 
 class IMPORT_ASSET_OT_import_asset(bpy.types.Operator):
@@ -705,6 +790,9 @@ class IMPORT_ASSET_OT_import_asset(bpy.types.Operator):
                 progress_thread.join()
                 print('\n')
 
+            # Add the downloaded asset to the JSON file
+            add_downloaded_asset(asset_uid, self.asset_name, asset_type, asset_path, import_size, self.img_path)
+
             if context.scene.import_type == "import_to_scene":
                 import_result = import_to_scene(asset_name, asset_path, asset_type)
                 if import_result != 0:
@@ -736,17 +824,67 @@ class IMPORT_ASSET_OT_import_asset(bpy.types.Operator):
         return {'FINISHED'}
 
 
+class IMPORT_DOWNLOADED_ASSET_OT_import(bpy.types.Operator):
+    bl_idname = "import_downloaded_asset.import"
+    bl_label = "Import Downloaded Asset"
+
+    asset_uid: bpy.props.StringProperty()
+    asset_name: bpy.props.StringProperty()
+    asset_type: bpy.props.StringProperty()
+    asset_path: bpy.props.StringProperty()
+    thumbnail_path: bpy.props.StringProperty()
+    import_method: bpy.props.StringProperty()
+
+    def execute(self, context):
+        if self.import_method == "import_to_scene":
+            import_result = import_to_scene(self.asset_name, self.asset_path, self.asset_type)
+            if import_result != 0:
+                self.report({'INFO'}, "Asset Import Failed")
+                return {'FINISHED'}
+        elif self.import_method == "add_to_asset_library":
+            prefs = context.preferences.addons[__name__].preferences
+            blender_path = prefs.blender_executable_path
+            if not blender_path or not os.path.isfile(blender_path):
+                self.report({"ERROR"}, "Invalid Blender executable path!")
+                return {'CANCELLED'}
+            command = [blender_path, "-b", "--factory-startup", "-P", asset_importer_path, "--", assets_dir,
+                       self.asset_name, self.asset_path, self.asset_type, self.thumbnail_path]
+            process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+
+            com = process.communicate()[0]
+            if process.returncode != 0:
+                print("Error Importing and Marking Asset")
+            else:
+                print(str(com))
+                for area in bpy.context.screen.areas:
+                    if area.type == 'FILE_BROWSER':
+                        with bpy.context.temp_override(area=area):
+                            bpy.ops.asset.library_refresh()
+                        break
+
+        self.report({'INFO'}, "Asset Imported")
+        return {'FINISHED'}
+
+
 class FILEBROWSER_OT_search_assets(bpy.types.Operator):
     bl_idname = "filebrowser.search_assets"
     bl_label = "Search Assets"
 
     def execute(self, context):
-        global cancel_loading, loading_thread
+        global loading_thread, preview_collection, asset_queue, cancel_loading
 
         cancel_loading = True
         if loading_thread and loading_thread.is_alive():
-            loading_thread.join()  # Wait for it to stop
+            loading_thread.join()  # Wait for the thread to stop
+            print("Stopping existing loading thread...")
         cancel_loading = False
+
+        with asset_queue.mutex:  # Ensure thread-safe access to the queue
+            asset_queue.queue.clear()
+
+        if preview_collection:
+            preview_collection.clear()
+        FILEBROWSER_PT_assets.assets = {}
 
         # bpy.context.window.cursor_set('WAIT')
         cursor = "0"
@@ -784,7 +922,28 @@ class FILEBROWSER_OT_set_asset_mode(bpy.types.Operator):
     asset_mode: bpy.props.StringProperty()
 
     def execute(self, context):
-        context.scene.asset_mode = self.asset_mode
+        if self.asset_mode == "downloaded":
+            global loading_thread, preview_collection, asset_queue, cancel_loading
+
+            cancel_loading = True
+            if loading_thread and loading_thread.is_alive():
+                loading_thread.join()  # Wait for the thread to stop
+                print("Stopping existing loading thread...")
+            cancel_loading = False
+
+            with asset_queue.mutex:  # Ensure thread-safe access to the queue
+                asset_queue.queue.clear()
+
+            if preview_collection:
+                preview_collection.clear()
+            FILEBROWSER_PT_assets.assets = {}
+
+            context.scene.asset_mode = self.asset_mode
+
+        elif self.asset_mode == "online":
+            context.scene.asset_mode = self.asset_mode
+            bpy.ops.filebrowser.search_assets()
+
         return {'FINISHED'}
 
 
@@ -795,17 +954,6 @@ class FILEBROWSER_OT_set_asset_type(bpy.types.Operator):
     asset_type: bpy.props.StringProperty()
 
     def execute(self, context):
-        global cancel_loading, loading_thread, asset_queue
-
-        cancel_loading = True
-        if loading_thread and loading_thread.is_alive():
-            loading_thread.join()  # Wait for it to stop
-        cancel_loading = False
-
-        # Clear the asset queue to prevent old assets from being processed
-        with asset_queue.mutex:  # Ensure thread-safe access to the queue
-            asset_queue.queue.clear()
-
         context.scene.asset_type = self.asset_type
         bpy.ops.filebrowser.search_assets()
         return {'FINISHED'}
@@ -833,6 +981,39 @@ class FILEBROWSER_OT_set_import_size(bpy.types.Operator):
         return {'FINISHED'}
 
 
+class FILEBROWSER_OT_set_downloaded_asset_type(bpy.types.Operator):
+    bl_idname = "filebrowser.set_downloaded_asset_type"
+    bl_label = "Set Downloaded Asset Type"
+
+    asset_type: bpy.props.StringProperty()
+
+    def execute(self, context):
+        context.scene.downloaded_asset_type = self.asset_type
+        return {'FINISHED'}
+
+
+class FILEBROWSER_OT_set_downloaded_import_size(bpy.types.Operator):
+    bl_idname = "filebrowser.set_downloaded_import_size"
+    bl_label = "Set Downloaded Import Size"
+
+    import_size: bpy.props.StringProperty()
+
+    def execute(self, context):
+        context.scene.downloaded_import_size = self.import_size
+        return {'FINISHED'}
+
+
+class FILEBROWSER_OT_set_downloaded_import_method(bpy.types.Operator):
+    bl_idname = "filebrowser.set_downloaded_import_method"
+    bl_label = "Set Downloaded Import Method"
+
+    import_method: bpy.props.StringProperty()
+
+    def execute(self, context):
+        context.scene.downloaded_import_method = self.import_method
+        return {'FINISHED'}
+
+
 classes = [
     FILEBROWSER_PT_assets,
     FILEBROWSER_OT_load_more,
@@ -842,6 +1023,10 @@ classes = [
     FILEBROWSER_OT_set_asset_type,
     FILEBROWSER_OT_set_import_type,
     FILEBROWSER_OT_set_import_size,
+    FILEBROWSER_OT_set_downloaded_asset_type,
+    FILEBROWSER_OT_set_downloaded_import_size,
+    FILEBROWSER_OT_set_downloaded_import_method,
+    IMPORT_DOWNLOADED_ASSET_OT_import,
     AssetProcessorPreferences,
 ]
 
@@ -873,6 +1058,21 @@ def register():
     bpy.types.Scene.import_size = bpy.props.StringProperty(
         name="Import Size",
         default='2'
+    )
+
+    bpy.types.Scene.downloaded_asset_type = bpy.props.StringProperty(
+        name="Downloaded Asset Type",
+        default="3d-model"
+    )
+
+    bpy.types.Scene.downloaded_import_size = bpy.props.StringProperty(
+        name="Downloaded Import Size",
+        default="2"
+    )
+
+    bpy.types.Scene.downloaded_import_method = bpy.props.StringProperty(
+        name="Downloaded Import Method",
+        default="import_to_scene"
     )
 
     FILEBROWSER_PT_assets.assets = {}
