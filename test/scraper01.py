@@ -8,10 +8,10 @@ import cloudscraper
 import json
 import tempfile
 
-parser = argparse.ArgumentParser(description="Utility to get assets")
-parser.add_argument("--asset_type", type=str, required=True, help="asset type")
-parser.add_argument("--query", type=str, required=True, help="search query")
-args = parser.parse_args()
+# parser = argparse.ArgumentParser(description="Utility to get assets")
+# parser.add_argument("--asset_type", type=str, required=True, help="asset type")
+# parser.add_argument("--query", type=str, required=True, help="search query")
+# args = parser.parse_args()
 
 tempdir = tempfile.gettempdir()
 
@@ -19,9 +19,9 @@ url = "https://www.fab.com/i/listings/search"
 referer = "https://www.fab.com/sellers/Quixel"
 
 if platform.system() == 'Windows':
-    user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:134.0) Gecko/20100101 Firefox/134.0"
+    user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:135.0) Gecko/20100101 Firefox/135.0"
 else:
-    user_agent = "Mozilla/5.0 (X11; Linux x86_64; rv:134.0) Gecko/20100101 Firefox/134.0"
+    user_agent = "Mozilla/5.0 (X11; Linux x86_64; rv:135.0) Gecko/20100101 Firefox/135.0"
 
 headers = {
     "Accept": "application/json, text/plain, */*",
@@ -45,22 +45,25 @@ headers = {
 
 
 def fetch_and_save_assets():
-    asset_type = args.asset_type
-    query = args.query
-    querystring = {
-        "asset_formats": ["gltf"],
-        "currency": "USD",
-        "is_ai_generated": "0",
-        "is_free": "1",
-        "seller": "Quixel",
-        "sort_by": "listingTypeWeight",
-        "cursor": 0,
-        "listing_types": asset_type,
-        "q": query
-    }
+    # asset_type = args.asset_type
+    # query = args.query
+    # querystring = {
+    #     "asset_formats": ["gltf"],
+    #     "currency": "USD",
+    #     "is_ai_generated": "0",
+    #     "is_free": "1",
+    #     "seller": "Quixel",
+    #     "sort_by": "listingTypeWeight",
+    #     "cursor": 0,
+    #     "listing_types": asset_type,
+    #     "q": query
+    # }
+
+    querystring = {"aggregate_on": "category_per_listing_type", "count": "0", "currency": "USD", "is_free": "1", "seller": "Quixel"}
+
     print(querystring)
 
-    file_path = os.path.join(tempdir, f"output_{asset_type}_{query}.json")
+    file_path = os.path.join(tempdir, f"output_listing_count.json")
 
     max_retries = 5  # Number of retries
     retry_delay = 2  # Delay in seconds between retries
