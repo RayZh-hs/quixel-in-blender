@@ -889,7 +889,10 @@ class FILEBROWSER_OT_search_assets(bpy.types.Operator):
         # bpy.context.window.cursor_set('WAIT')
         cursor = "0"
         update_assets(context, cursor)
-        self.report({'INFO'}, "Loading Assets List")
+        try:
+            self.report({'INFO'}, "Loading Assets List")
+        except:
+            pass
         return {'FINISHED'}
 
 
