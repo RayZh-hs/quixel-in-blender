@@ -229,7 +229,7 @@ def update_assets(context, cursor):
         time_difference = datetime.now() - datetime.fromtimestamp(os.path.getmtime(file_path))
         print(f"last synced: {time_difference}")
 
-    if not os.path.exists(file_path) or time_difference > timedelta(hours=1):
+    if not os.path.exists(file_path) or time_difference > timedelta(hours=5):
         url = "https://www.fab.com/i/listings/search"
         referer = "https://www.fab.com/sellers/Quixel"
 
@@ -287,24 +287,27 @@ def load_assets_in_background(file_path,asset_type):
         img_name = os.path.basename(img_url) if img_url else None
         img_path = os.path.join(thumbnail_dir, img_name) if img_name else preview_img
 
-        # Download the image if not already present
-        if img_url and not os.path.exists(img_path):
-            command = [python_path, utils_path, "--function", "download_file", img_url, img_path]
-            print(f"Running {command} inside the virtual environment...")
-            process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-            process.communicate()
+        if os.path.exists(img_path):
+            time_difference = datetime.now() - datetime.fromtimestamp(os.path.getmtime(img_path))
 
-            if asset_type in ('material', 'decal'):
-                command = [python_path, utils_path, "--function", "crop_thumbnails", img_path,]
+        if not os.path.exists(img_path) or time_difference > timedelta(days=5):
+            if img_url:
+                command = [python_path, utils_path, "--function", "download_file", img_url, img_path]
                 print(f"Running {command} inside the virtual environment...")
                 process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-                print(process.communicate()[0])
+                process.communicate()
 
-            if asset_type == '3d-model':
-                command = [python_path, utils_path, "--function", "smart_square_crop", img_path, ]
-                print(f"Running {command} inside the virtual environment...")
-                process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-                print(process.communicate()[0])
+                if asset_type in ('material', 'decal'):
+                    command = [python_path, utils_path, "--function", "crop_thumbnails", img_path,]
+                    print(f"Running {command} inside the virtual environment...")
+                    process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                    print(process.communicate()[0])
+
+                if asset_type == '3d-model':
+                    command = [python_path, utils_path, "--function", "smart_square_crop", img_path, ]
+                    print(f"Running {command} inside the virtual environment...")
+                    process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                    print(process.communicate()[0])
 
         if not os.path.exists(img_path):
             img_path = preview_img
