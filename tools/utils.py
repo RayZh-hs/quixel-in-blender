@@ -32,18 +32,10 @@ headers = {
 }
 
 querystring = {
-    "asset_formats": ["gltf"],
-    "currency": "USD",
-    "is_ai_generated": "0",
     "is_free": "1",
     "seller": "Quixel",
-    "sort_by": "listingTypeWeight"
+    "sort_by": "-relevance"
 }
-
-# data_dir = "/tmp/fab_data"
-
-# if not os.path.exists(data_dir):
-#     os.mkdir(data_dir)
 
 
 def crop_thumbnails(image_path):
@@ -117,6 +109,8 @@ def fetch_assets(url, referer, data_dir, asset_type=None, query=None, cursor=Non
     headers["Referer"] = referer
     querystring["cursor"] = cursor
     querystring["listing_types"] = asset_type
+    if asset_type == "3d-model":
+        querystring["asset_formats"] = "fbx"
     querystring["q"] = query
 
     file_path = os.path.join(data_dir, f"search_{asset_type}_{query}_{cursor}.json")
