@@ -755,9 +755,15 @@ class IMPORT_ASSET_OT_import_asset(bpy.types.Operator):
             import_size = int(context.scene.import_size.strip())
             for asset in data:
                 if asset["assetFormatType"]["code"] == asset_format:
-                    asset_name = asset["files"][import_size]["name"]
+                    # asset_name = asset["files"][import_size]["name"]
+                    while import_size >= 0:
+                        try:
+                            asset_name = asset["files"][import_size]["name"]
+                            break
+                        except IndexError:
+                            import_size -= 1
                     asset_uid = asset["files"][import_size]["uid"]  # Get UID of last file
-            print(f"Last UID for {asset_format}: {asset_uid}")
+            print(f"UID for {asset_format}: {asset_uid}")
 
             asset_path = os.path.join(assets_dir, asset_name)
 
