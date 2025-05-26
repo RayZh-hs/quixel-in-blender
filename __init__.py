@@ -480,7 +480,8 @@ def create_pbr_shader(material, texture_maps_path):
         'Roughness': 'Roughness',
         'Specular': 'Specular',
         'AO': 'AO',
-        'Bump': 'Bump'
+        'Bump': 'Bump',
+        'Opacity': 'Opacity',
     }
 
     # Get all jpg files in the specified directory
@@ -541,6 +542,10 @@ def create_pbr_shader(material, texture_maps_path):
     # Connect Specular
     if 'Specular' in texture_nodes:
         links.new(texture_nodes['Specular'].outputs['Color'], principled_bsdf.inputs['Specular IOR Level'])
+
+    # Connect Opacity
+    if 'Opacity' in texture_nodes:
+        links.new(texture_nodes['Opacity'].outputs['Color'], principled_bsdf.inputs['Alpha'])
 
     # Connect Normal and Bump
     if 'Normal' in texture_nodes:
