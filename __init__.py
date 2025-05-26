@@ -678,6 +678,7 @@ class FILEBROWSER_PT_assets(bpy.types.Panel):
             row = box.row(align=True)
             row.operator("filebrowser.set_downloaded_asset_type", text="3D Model", depress=asset_type == '3d-model').asset_type = '3d-model'
             row.operator("filebrowser.set_downloaded_asset_type", text="Material", depress=asset_type == 'material').asset_type = 'material'
+            row.operator("filebrowser.set_downloaded_asset_type", text="Decal", depress=asset_type == 'decal').asset_type = 'decal'
 
             # Add import size selection buttons
             row = box.row(align=True)
