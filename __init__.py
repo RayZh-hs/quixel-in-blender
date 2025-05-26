@@ -482,6 +482,7 @@ def create_pbr_shader(material, texture_maps_path):
         'AO': 'AO',
         'Bump': 'Bump',
         'Opacity': 'Opacity',
+        'Displacement': 'Displacement'
     }
 
     # Get all jpg files in the specified directory
@@ -511,7 +512,7 @@ def create_pbr_shader(material, texture_maps_path):
             y_offset -= 300  # Move the next texture down
 
             # Set 'Non-Color' for specific maps
-            if map_type in ['Roughness', 'Metallic', 'Normal', 'Specular', 'AO', 'Bump']:
+            if map_type in ['Roughness', 'Metallic', 'Normal', 'Specular', 'AO', 'Bump', 'Opacity', 'Displacement']:
                 image.colorspace_settings.name = 'Non-Color'
 
             texture_nodes[map_type] = image_texture
@@ -546,6 +547,12 @@ def create_pbr_shader(material, texture_maps_path):
     # Connect Opacity
     if 'Opacity' in texture_nodes:
         links.new(texture_nodes['Opacity'].outputs['Color'], principled_bsdf.inputs['Alpha'])
+
+    # Connect Displacement
+    if 'Displacement' in texture_nodes:
+        displacement_node = nodes.new(type='ShaderNodeDisplacement')
+        links.new(texture_nodes['Displacement'].outputs['Color'], displacement_node.inputs['Height'])
+        links.new(displacement_node.outputs['Displacement'], material_output.inputs['Displacement'])
 
     # Connect Normal and Bump
     if 'Normal' in texture_nodes:
