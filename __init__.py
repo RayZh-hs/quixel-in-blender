@@ -417,7 +417,7 @@ def import_to_scene(asset_name, asset_path, asset_type):
                     new_empty.select_set(True)
             return 0
 
-        elif asset_type == 'material':
+        elif asset_type == 'material' or asset_type == 'decal':
             ass_name = os.path.splitext(os.path.basename(asset_name))[0]
             active_object = bpy.context.active_object
             if active_object is not None:
@@ -592,6 +592,7 @@ class FILEBROWSER_PT_assets(bpy.types.Panel):
         row = layout.row(align=True)
         row.operator("filebrowser.set_asset_mode", text="Online", depress=context.scene.asset_mode == 'online').asset_mode = 'online'
         row.operator("filebrowser.set_asset_mode", text="Downloaded", depress=context.scene.asset_mode == 'downloaded').asset_mode = 'downloaded'
+        row.operator("filebrowser.set_asset_type", text="Decal", depress=context.scene.asset_type == 'decal').asset_type = 'decal'
 
         if context.scene.asset_mode == 'online':
             box = layout.box()
@@ -749,6 +750,8 @@ class IMPORT_ASSET_OT_import_asset(bpy.types.Operator):
         if asset_type == '3d-model':
             asset_format = "fbx"
         if asset_type == "material":
+            asset_format = "texture-set"
+        if asset_type == "decal":
             asset_format = "texture-set"
 
         if asset_format:
