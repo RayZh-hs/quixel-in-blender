@@ -604,13 +604,13 @@ class FILEBROWSER_PT_assets(bpy.types.Panel):
         row = layout.row(align=True)
         row.operator("filebrowser.set_asset_mode", text="Online", depress=context.scene.asset_mode == 'online').asset_mode = 'online'
         row.operator("filebrowser.set_asset_mode", text="Downloaded", depress=context.scene.asset_mode == 'downloaded').asset_mode = 'downloaded'
-        row.operator("filebrowser.set_asset_type", text="Decal", depress=context.scene.asset_type == 'decal').asset_type = 'decal'
 
         if context.scene.asset_mode == 'online':
             box = layout.box()
             row = box.row(align=True)
             row.operator("filebrowser.set_asset_type", text="3D Model", depress=context.scene.asset_type == '3d-model').asset_type = '3d-model'
             row.operator("filebrowser.set_asset_type", text="Material", depress=context.scene.asset_type == 'material').asset_type = 'material'
+            row.operator("filebrowser.set_asset_type", text="Decal", depress=context.scene.asset_type == 'decal').asset_type = 'decal'
 
             row = box.row(align=True)
             row.operator("filebrowser.set_import_size", text="raw", depress=context.scene.import_size == '0').import_size = '0'
