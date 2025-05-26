@@ -15,8 +15,8 @@ bl_info = {
     "name": "Fab to Blender",
     "description": "Browse and import free quixel assets from fab.com",
     "author": "https://github.com/cgmaterial",
-    "version": (2, 0, 0),
-    "blender": (4, 0, 0),
+    "version": (2, 1, 0),
+    "blender": (4, 4, 3),
     "location": "View3D > Sidebar > Quixel",
     "category": "Asset Management",
 }
