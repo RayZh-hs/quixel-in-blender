@@ -551,6 +551,7 @@ def create_pbr_shader(material, texture_maps_path):
     # Connect Displacement
     if 'Displacement' in texture_nodes:
         displacement_node = nodes.new(type='ShaderNodeDisplacement')
+        displacement_node.location = (100, -400)
         links.new(texture_nodes['Displacement'].outputs['Color'], displacement_node.inputs['Height'])
         links.new(displacement_node.outputs['Displacement'], material_output.inputs['Displacement'])
 
