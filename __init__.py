@@ -15,8 +15,8 @@ bl_info = {
     "name": "Fab to Blender",
     "description": "Browse and import free quixel assets from fab.com",
     "author": "https://github.com/cgmaterial",
-    "version": (2, 0, 0),
-    "blender": (4, 0, 0),
+    "version": (2, 1, 0),
+    "blender": (4, 4, 3),
     "location": "View3D > Sidebar > Quixel",
     "category": "Asset Management",
 }
@@ -417,7 +417,7 @@ def import_to_scene(asset_name, asset_path, asset_type):
                     new_empty.select_set(True)
             return 0
 
-        elif asset_type == 'material':
+        elif asset_type == 'material' or asset_type == 'decal':
             ass_name = os.path.splitext(os.path.basename(asset_name))[0]
             active_object = bpy.context.active_object
             if active_object is not None:
@@ -480,7 +480,9 @@ def create_pbr_shader(material, texture_maps_path):
         'Roughness': 'Roughness',
         'Specular': 'Specular',
         'AO': 'AO',
-        'Bump': 'Bump'
+        'Bump': 'Bump',
+        'Opacity': 'Opacity',
+        'Displacement': 'Displacement'
     }
 
     # Get all jpg files in the specified directory
@@ -510,7 +512,7 @@ def create_pbr_shader(material, texture_maps_path):
             y_offset -= 300  # Move the next texture down
 
             # Set 'Non-Color' for specific maps
-            if map_type in ['Roughness', 'Metallic', 'Normal', 'Specular', 'AO', 'Bump']:
+            if map_type in ['Roughness', 'Metallic', 'Normal', 'Specular', 'AO', 'Bump', 'Opacity', 'Displacement']:
                 image.colorspace_settings.name = 'Non-Color'
 
             texture_nodes[map_type] = image_texture
@@ -541,6 +543,16 @@ def create_pbr_shader(material, texture_maps_path):
     # Connect Specular
     if 'Specular' in texture_nodes:
         links.new(texture_nodes['Specular'].outputs['Color'], principled_bsdf.inputs['Specular IOR Level'])
+
+    # Connect Opacity
+    if 'Opacity' in texture_nodes:
+        links.new(texture_nodes['Opacity'].outputs['Color'], principled_bsdf.inputs['Alpha'])
+
+    # Connect Displacement
+    if 'Displacement' in texture_nodes:
+        displacement_node = nodes.new(type='ShaderNodeDisplacement')
+        links.new(texture_nodes['Displacement'].outputs['Color'], displacement_node.inputs['Height'])
+        links.new(displacement_node.outputs['Displacement'], material_output.inputs['Displacement'])
 
     # Connect Normal and Bump
     if 'Normal' in texture_nodes:
@@ -598,6 +610,7 @@ class FILEBROWSER_PT_assets(bpy.types.Panel):
             row = box.row(align=True)
             row.operator("filebrowser.set_asset_type", text="3D Model", depress=context.scene.asset_type == '3d-model').asset_type = '3d-model'
             row.operator("filebrowser.set_asset_type", text="Material", depress=context.scene.asset_type == 'material').asset_type = 'material'
+            row.operator("filebrowser.set_asset_type", text="Decal", depress=context.scene.asset_type == 'decal').asset_type = 'decal'
 
             row = box.row(align=True)
             row.operator("filebrowser.set_import_size", text="raw", depress=context.scene.import_size == '0').import_size = '0'
@@ -665,6 +678,7 @@ class FILEBROWSER_PT_assets(bpy.types.Panel):
             row = box.row(align=True)
             row.operator("filebrowser.set_downloaded_asset_type", text="3D Model", depress=asset_type == '3d-model').asset_type = '3d-model'
             row.operator("filebrowser.set_downloaded_asset_type", text="Material", depress=asset_type == 'material').asset_type = 'material'
+            row.operator("filebrowser.set_downloaded_asset_type", text="Decal", depress=asset_type == 'decal').asset_type = 'decal'
 
             # Add import size selection buttons
             row = box.row(align=True)
@@ -749,6 +763,8 @@ class IMPORT_ASSET_OT_import_asset(bpy.types.Operator):
         if asset_type == '3d-model':
             asset_format = "fbx"
         if asset_type == "material":
+            asset_format = "texture-set"
+        if asset_type == "decal":
             asset_format = "texture-set"
 
         if asset_format:
