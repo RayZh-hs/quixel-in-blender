@@ -119,8 +119,8 @@ def update_asset_data_path(self, context):
 
     data_dir = os.path.join(self.asset_data_path, "fab_data")
     thumbnail_dir = os.path.join(data_dir, "thumbnails")
-    assets_dir = os.path.join(data_dir, "assets")
-    json_dir = os.path.join(data_dir, "json")
+    assets_dir = os.path.join(data_dir, "quixel_assets")
+    json_dir = os.path.join(data_dir, "json_files")
     unzipped_assets_dir = os.path.join(assets_dir, "unzipped_assets")
     blender_files_dir = os.path.join(assets_dir, "blender_files")
     catalog_file = os.path.join(assets_dir, "blender_assets.cats.txt")
