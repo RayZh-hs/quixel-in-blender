@@ -9,6 +9,7 @@ from datetime import datetime, timezone, timedelta
 import zipfile
 import uuid
 import platform
+import concurrent.futures
 
 bl_info = {
     "name": "Fab to Blender",
@@ -300,6 +301,7 @@ def load_assets_in_background(file_path, asset_type, context):
     cursors["next_cursor"] = cursor_data.get("next")
 
     results_data = data.get("results", [])
+    items_to_download = []
 
     for item in results_data:
         if cancel_loading:
@@ -310,50 +312,46 @@ def load_assets_in_background(file_path, asset_type, context):
             continue
         asset_name = item.get("title", "")
         uid = item.get("uid", "")
-        img_path = preview_img  # Set temporary placeholder
-        asset_queue.put((asset_name, uid, img_path))
+        asset_queue.put((asset_name, uid, preview_img))  # Temporary placeholder
+
+        # Prepare download
+        img_url = next((img["url"] for img in item["thumbnails"][0]["images"] if img["height"] == 180), None)
+        if img_url:
+            img_name = os.path.basename(img_url)
+            img_path = os.path.join(paths["thumbnail_dir"], img_name)
+            items_to_download.append((asset_name, uid, img_url, img_path))
 
     bpy.app.timers.register(update_ui_from_queue)
 
-    for item in results_data:
-        if cancel_loading:
-            print("Loading cancelled.")
-            return
-        asset_category = item["category"]["name"]
-        if asset_category == "Plants":
-            continue
-        asset_name = item.get("title", "")
-        uid = item.get("uid", "")
-        img_url = next((img["url"] for img in item["thumbnails"][0]["images"] if img["height"] == 180), None)
-        img_name = os.path.basename(img_url) if img_url else None
-        img_path = os.path.join(paths["thumbnail_dir"], img_name) if img_name else preview_img
-
+    def download_and_process(item):
+        asset_name, uid, img_url, img_path = item
         if os.path.exists(img_path):
-            time_difference = datetime.now() - datetime.fromtimestamp(os.path.getmtime(img_path))
+            time_diff = datetime.now() - datetime.fromtimestamp(os.path.getmtime(img_path))
+            if time_diff <= timedelta(days=5):
+                return (asset_name, uid, img_path)
 
-        if not os.path.exists(img_path) or time_difference > timedelta(days=5):
-            if img_url:
-                command = [paths["python_path"], utils_path, "--function", "download_file", img_url, img_path]
-                print(f"Running {command} inside the virtual environment...")
-                process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-                process.communicate()
-
-                if asset_type in ('material', 'decal'):
-                    command = [paths["python_path"], utils_path, "--function", "crop_thumbnails", img_path]
-                    print(f"Running {command} inside the virtual environment...")
-                    process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-                    print(process.communicate()[0])
-
-                if asset_type == '3d-model':
-                    command = [paths["python_path"], utils_path, "--function", "smart_square_crop", img_path]
-                    print(f"Running {command} inside the virtual environment...")
-                    process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-                    print(process.communicate()[0])
+        try:
+            subprocess.run([paths["python_path"], utils_path, "--function", "download_file", img_url, img_path],
+                           check=True, capture_output=True, text=True)
+            if asset_type in ('material', 'decal'):
+                subprocess.run([paths["python_path"], utils_path, "--function", "crop_thumbnails", img_path],
+                               check=True, capture_output=True, text=True)
+            elif asset_type == '3d-model':
+                subprocess.run([paths["python_path"], utils_path, "--function", "smart_square_crop", img_path],
+                               check=True, capture_output=True, text=True)
+        except subprocess.CalledProcessError as e:
+            print(f"Failed to download/process {uid}: {e}")
 
         if not os.path.exists(img_path):
             img_path = preview_img
+        return (asset_name, uid, img_path)
 
-        asset_queue.put((asset_name, uid, img_path))
+    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+        for result in executor.map(download_and_process, items_to_download):
+            if cancel_loading:
+                print("Loading cancelled.")
+                return
+            asset_queue.put(result)
 
     asset_queue.put(None)
 
