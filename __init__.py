@@ -315,7 +315,11 @@ def load_assets_in_background(file_path, asset_type, context):
         asset_queue.put((asset_name, uid, preview_img))  # Temporary placeholder
 
         # Prepare download
-        img_url = next((img["url"] for img in item["thumbnails"][0]["images"] if img["height"] == 180), None)
+        img_url = preview_img  # fallback image
+        images = item.get("thumbnails", [{}])[0].get("images", [])
+        if images:
+            closest_img = min(images, key=lambda img: abs(img.get("height", 0) - 180))
+            img_url = closest_img.get("url", preview_img)
         if img_url:
             img_name = os.path.basename(img_url)
             img_path = os.path.join(paths["thumbnail_dir"], img_name)
