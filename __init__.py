@@ -77,6 +77,40 @@ def get_asset_paths(context):
     }
 
 
+def get_thumbnail_cache_size(context):
+    paths = get_asset_paths(context)
+    thumbnail_dir = paths["thumbnail_dir"]
+    total_size = 0
+    for item in os.listdir(thumbnail_dir):
+        thumbnail = os.path.join(thumbnail_dir, item)
+        if os.path.isfile(thumbnail):
+            total_size += os.path.getsize(thumbnail)
+    return total_size / (1024 ** 2)
+
+
+def get_jsonfile_cache_size(context):
+    paths = get_asset_paths(context)
+    json_dir = paths["json_dir"]
+    total_size = 0
+    for item in os.listdir(json_dir):
+        json_file = os.path.join(json_dir, item)
+        if os.path.isfile(json_file):
+            total_size += os.path.getsize(json_file)
+    return total_size / (1024 ** 2)
+
+
+def get_zipfile_cache_size(context):
+    paths = get_asset_paths(context)
+    assets_dir = paths["assets_dir"]
+    total_size = 0
+    for item in os.listdir(assets_dir):
+        if item.endswith(".zip"):
+            zip_file = os.path.join(assets_dir, item)
+            if os.path.isfile(zip_file):
+                total_size += os.path.getsize(zip_file)
+    return total_size / (1024 ** 2)
+
+
 def is_valid_python_path(path):
     """Check if the provided path is a valid Python executable."""
     if not path or not os.path.isfile(path):
@@ -122,7 +156,16 @@ class AssetProcessorPreferences(bpy.types.AddonPreferences):
         layout.prop(self, "system_python")
         if not is_valid_python_path(self.system_python):
             layout.label(text="Set a valid Python executable path!", icon='ERROR')
-
+        row = layout.row()
+        # thumbnail_size_mb = get_thumbnail_cache_size(context) / (1024 ** 2)
+        row.label(text=f"Thumbnail Cache: {get_thumbnail_cache_size(context):.2f} MB")
+        row.operator("filebrowser.clear_thumbnails", text="Clear Thumbnail Cache", icon='TRASH')
+        row = layout.row()
+        row.label(text=f"JSON Cache: {get_jsonfile_cache_size(context):.2f} MB")
+        row.operator("filebrowser.clear_jsonfiles", text="Clear JSON Cache", icon='TRASH')
+        row = layout.row()
+        row.label(text=f"ZIP file Cache: {get_zipfile_cache_size(context):.2f} MB")
+        row.operator("filebrowser.clear_zipfiles", text="Clear ZIP file Cache", icon='TRASH')
 
 def initialize_paths(context):
     """Initialize all directories and virtual environment based on preferences."""
@@ -216,11 +259,68 @@ def fix_asset_paths(context):
 
 def clear_thumbnail_cache(context):
     paths = get_asset_paths(context)
-    for item in os.listdir(paths["thumbnail_dir"]):
-        thumbnail = os.path.join(paths["thumbnail_dir"], item)
-        if item and os.path.isfile(thumbnail):
-            os.remove(thumbnail)
-            print(f"Removed thumbnail: {thumbnail}")
+    thumbnail_dir = paths["thumbnail_dir"]
+    deleted = 0
+    size_freed = 0
+
+    if not os.path.exists(thumbnail_dir):
+        print("Thumbnail directory does not exist.")
+        return
+
+    for item in os.listdir(thumbnail_dir):
+        thumbnail = os.path.join(thumbnail_dir, item)
+        if os.path.isfile(thumbnail):
+            try:
+                size_freed += os.path.getsize(thumbnail)
+                os.remove(thumbnail)
+                deleted += 1
+            except Exception as e:
+                print(f"Failed to remove {thumbnail}: {e}")
+
+    print(f"Cleared {deleted} thumbnails, freed {size_freed / (1024**2):.2f} MB")
+
+
+def clear_jsonfile_cache(context):
+    paths = get_asset_paths(context)
+    json_dir = paths["json_dir"]
+    deleted = 0
+    size_freed = 0
+
+    if not os.path.exists(json_dir):
+        print("json directory does not exist.")
+        return
+
+    for item in os.listdir(json_dir):
+        json_file = os.path.join(json_dir, item)
+        if os.path.isfile(json_file):
+            try:
+                size_freed += os.path.getsize(json_file)
+                os.remove(json_file)
+                deleted += 1
+            except Exception as e:
+                print(f"Failed to delete {json_file}: {e}")
+
+    print(f"Cleared {deleted} JSON files, freed {size_freed / (1024 ** 2):.2f} MB")
+
+
+def clear_zipfile_cache(context):
+    paths = get_asset_paths(context)
+    assets_dir = paths["assets_dir"]
+    deleted = 0
+    size_freed = 0
+
+    for item in os.listdir(assets_dir):
+        if item.endswith(".zip"):
+            zip_file = os.path.join(assets_dir, item)
+            if os.path.isfile(zip_file):
+                try:
+                    size_freed += os.path.getsize(zip_file)
+                    os.remove(zip_file)
+                    deleted += 1
+                except Exception as e:
+                    print(f"Failed to delete {zip_file}: {e}")
+
+    print(f"Deleted {deleted} ZIP files, freed {size_freed / (1024 ** 2):.2f} MB")
 
 
 def load_downloaded_assets(context):
@@ -393,8 +493,13 @@ def import_to_scene(context, asset_name, asset_path, asset_type):
     print(asset_path)
 
     if asset_path.endswith(".zip"):
-        extract_path = os.path.join(paths["unzipped_assets_dir"], os.path.splitext(os.path.basename(asset_name))[0])
-        if not os.path.exists(extract_path):
+        extract_name = os.path.splitext(os.path.basename(asset_name))[0]
+        extract_path = os.path.join(paths["unzipped_assets_dir"], extract_name)
+
+        if os.path.exists(extract_path):
+            print(f"Using extracted folder: {extract_path}")
+        elif os.path.exists(asset_path):
+            print(f"Extracting from ZIP: {asset_path}")
             try:
                 with zipfile.ZipFile(asset_path, 'r') as zip_ref:
                     zip_ref.extractall(extract_path)
@@ -403,7 +508,8 @@ def import_to_scene(context, asset_name, asset_path, asset_type):
                 print(f"{asset_name} is not a valid ZIP file.")
                 return 1
         else:
-            print(f"Asset '{asset_name}' is already unzipped. Skipping extraction.")
+            print(f"Missing both ZIP and extracted folder for asset: {asset_name}")
+            return 1
 
         if asset_type == '3d-model':
             for file_name in os.listdir(extract_path):
@@ -782,33 +888,41 @@ class IMPORT_ASSET_OT_import_asset(bpy.types.Operator):
                     asset_uid = asset["files"][import_size]["uid"]
             print(f"UID for {asset_format}: {asset_uid}")
             asset_path = os.path.join(paths["assets_dir"], asset_name)
-            if not os.path.exists(asset_path):
-                down_link_file = os.path.join(paths["json_dir"], f"downlink_{asset_uid}.json")
-                link_expired = True
-                if os.path.exists(down_link_file):
+            extract_name = os.path.splitext(asset_name)[0]
+            extract_path = os.path.join(paths["unzipped_assets_dir"], extract_name)
+            if not os.path.exists(extract_path):
+                if not os.path.exists(asset_path):
+                    down_link_file = os.path.join(paths["json_dir"], f"downlink_{asset_uid}.json")
+                    link_expired = True
+                    if os.path.exists(down_link_file):
+                        with open(down_link_file, "r") as f:
+                            data = json.load(f)
+                        expires_dt = datetime.fromisoformat(data["downloadInfo"][0]["expires"].rstrip("Z")).replace(
+                            tzinfo=timezone.utc)
+                        link_expired = datetime.now(timezone.utc) > expires_dt
+                    if link_expired:
+                        url = f"https://www.fab.com/i/listings/{self.uid}/asset-formats/{asset_format}/files/{asset_uid}/download-info/binary"
+                        referer = f"https://www.fab.com/i/listings/{self.uid}"
+                        command = [paths["python_path"], utils_path, "--function", "fetch_down_link", url, referer,
+                                   paths["json_dir"], asset_uid]
+                        print(f"Running {command} inside the virtual environment...")
+                        process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                        print(process.communicate()[0])
                     with open(down_link_file, "r") as f:
                         data = json.load(f)
-                    expires_dt = datetime.fromisoformat(data["downloadInfo"][0]["expires"].rstrip("Z")).replace(
-                        tzinfo=timezone.utc)
-                    link_expired = datetime.now(timezone.utc) > expires_dt
-                if link_expired:
-                    url = f"https://www.fab.com/i/listings/{self.uid}/asset-formats/{asset_format}/files/{asset_uid}/download-info/binary"
-                    referer = f"https://www.fab.com/i/listings/{self.uid}"
-                    command = [paths["python_path"], utils_path, "--function", "fetch_down_link", url, referer,
-                               paths["json_dir"], asset_uid]
+                        down_link = data["downloadInfo"][0]["downloadUrl"]
+                    command = [paths["python_path"], utils_path, "--function", "download_file", down_link, asset_path]
                     print(f"Running {command} inside the virtual environment...")
                     process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-                    print(process.communicate()[0])
-                with open(down_link_file, "r") as f:
-                    data = json.load(f)
-                    down_link = data["downloadInfo"][0]["downloadUrl"]
-                command = [paths["python_path"], utils_path, "--function", "download_file", down_link, asset_path]
-                print(f"Running {command} inside the virtual environment...")
-                process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-                progress_thread = threading.Thread(target=update_ui_with_progress, args=(process,))
-                progress_thread.start()
-                progress_thread.join()
-                print('\n')
+                    progress_thread = threading.Thread(target=update_ui_with_progress, args=(process,))
+                    progress_thread.start()
+                    progress_thread.join()
+                    print('\n')
+                else:
+                    print(f"ZIP file already exists: {asset_path}")
+            else:
+                print(f"Unzipped folder already exists: {extract_path}")
+
             add_downloaded_asset(context, asset_uid, self.asset_name, asset_type, asset_path, import_size,
                                  self.img_path)
             if context.scene.import_type == "import_to_scene":
@@ -924,6 +1038,48 @@ class FILEBROWSER_OT_load_more(bpy.types.Operator):
         return {'FINISHED'}
 
 
+class FILEBROWSER_OT_clear_thumbnails(bpy.types.Operator):
+    bl_idname = "filebrowser.clear_thumbnails"
+    bl_label = "Clear Thumbnail Cache"
+    bl_description = "Delete all downloaded thumbnail images"
+
+    def execute(self, context):
+        clear_thumbnail_cache(context)
+        self.report({'INFO'}, "Thumbnail cache cleared.")
+        return {'FINISHED'}
+
+    def invoke(self, context, event):
+        return context.window_manager.invoke_confirm(self, event)
+
+
+class FILEBROWSER_OT_clear_jsonfiles(bpy.types.Operator):
+    bl_idname = "filebrowser.clear_jsonfiles"
+    bl_label = "Clear JSON Cache"
+    bl_description = "Delete all search data json files"
+
+    def execute(self, context):
+        clear_jsonfile_cache(context)
+        self.report({'INFO'}, "JSON cache cleared.")
+        return {'FINISHED'}
+
+    def invoke(self, context, event):
+        return context.window_manager.invoke_confirm(self, event)
+
+
+class FILEBROWSER_OT_clear_zipfiles(bpy.types.Operator):
+    bl_idname = "filebrowser.clear_zipfiles"
+    bl_label = "Clear ZIP Cache"
+    bl_description = "Delete all downloaded asset zip files"
+
+    def execute(self, context):
+        clear_zipfile_cache(context)
+        self.report({'INFO'}, "ZIP cache cleared.")
+        return {'FINISHED'}
+
+    def invoke(self, context, event):
+        return context.window_manager.invoke_confirm(self, event)
+
+
 class FILEBROWSER_OT_set_asset_mode(bpy.types.Operator):
     bl_idname = "filebrowser.set_asset_mode"
     bl_label = "Set Asset Mode"
@@ -1015,6 +1171,9 @@ classes = [
     FILEBROWSER_OT_load_more,
     IMPORT_ASSET_OT_import_asset,
     FILEBROWSER_OT_search_assets,
+    FILEBROWSER_OT_clear_thumbnails,
+    FILEBROWSER_OT_clear_jsonfiles,
+    FILEBROWSER_OT_clear_zipfiles,
     FILEBROWSER_OT_set_asset_mode,
     FILEBROWSER_OT_set_asset_type,
     FILEBROWSER_OT_set_import_type,

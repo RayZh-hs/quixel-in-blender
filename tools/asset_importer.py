@@ -85,14 +85,15 @@ def import_and_mark_asset(base_path, asset_name, asset_path, asset_type, preview
     unzipped_assets_dir, blender_files_dir, catalog_file = initialize_paths(base_path)
     initialize_catalog_file(catalog_file)
 
-
     if asset_path.endswith(".zip"):
         extract_path = os.path.join(unzipped_assets_dir, asset_name[:-4])
         ass_name = os.path.splitext(os.path.basename(asset_name))[0]
         blend_file_path = os.path.join(blender_files_dir, f"{ass_name}.blend")
 
-        # Check if the asset is already unzipped
-        if not os.path.exists(extract_path):
+        if os.path.exists(extract_path):
+            print(f"Using extracted folder: {extract_path}")
+        elif os.path.exists(asset_path):
+            print(f"Extracting from ZIP: {asset_path}")
             try:
                 with zipfile.ZipFile(asset_path, 'r') as zip_ref:
                     zip_ref.extractall(extract_path)
@@ -101,7 +102,8 @@ def import_and_mark_asset(base_path, asset_name, asset_path, asset_type, preview
                 print(f"{asset_name} is not a valid ZIP file.")
                 return
         else:
-            print(f"Asset '{asset_name}' is already unzipped. Skipping extraction.")
+            print(f"Missing both ZIP and extracted folder for asset: {asset_name}")
+            return
 
         json_file = find_json_file(extract_path, asset_name)
         if not json_file:
