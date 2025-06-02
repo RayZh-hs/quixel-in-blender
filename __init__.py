@@ -887,6 +887,10 @@ class IMPORT_ASSET_OT_import_asset(bpy.types.Operator):
                             import_size -= 1
                     asset_uid = asset["files"][import_size]["uid"]
             print(f"UID for {asset_format}: {asset_uid}")
+            if not asset_uid:
+                self.report({'ERROR'}, f"{asset_format} not found")
+                bpy.context.window.cursor_set('DEFAULT')
+                return {'CANCELLED'}
             asset_path = os.path.join(paths["assets_dir"], asset_name)
             extract_name = os.path.splitext(asset_name)[0]
             extract_path = os.path.join(paths["unzipped_assets_dir"], extract_name)

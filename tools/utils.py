@@ -111,6 +111,8 @@ def fetch_assets(url, referer, data_dir, asset_type=None, query=None, cursor=Non
     querystring["listing_types"] = asset_type
     if asset_type == "3d-model":
         querystring["asset_formats"] = "fbx"
+    if asset_type == "material":
+        querystring["asset_formats"] = "texture-set"
     querystring["q"] = query
 
     file_path = os.path.join(data_dir, f"search_{asset_type}_{query}_{cursor}.json")
