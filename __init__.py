@@ -156,6 +156,7 @@ class AssetProcessorPreferences(bpy.types.AddonPreferences):
         layout.prop(self, "system_python")
         if not is_valid_python_path(self.system_python):
             layout.label(text="Set a valid Python executable path!", icon='ERROR')
+        layout.separator()
         row = layout.row()
         # thumbnail_size_mb = get_thumbnail_cache_size(context) / (1024 ** 2)
         row.label(text=f"Thumbnail Cache: {get_thumbnail_cache_size(context):.2f} MB")
@@ -166,6 +167,11 @@ class AssetProcessorPreferences(bpy.types.AddonPreferences):
         row = layout.row()
         row.label(text=f"ZIP file Cache: {get_zipfile_cache_size(context):.2f} MB")
         row.operator("filebrowser.clear_zipfiles", text="Clear ZIP file Cache", icon='TRASH')
+        layout.separator()
+        row = layout.row()
+        row.operator("wm.url_open", text="Report a Bug", icon='URL').url = "https://github.com/cgmaterial/fab-to-blender/issues/new"
+        row.operator("wm.url_open", text="Support Development", icon='FUND').url = "https://ko-fi.com/cg_material"
+
 
 def initialize_paths(context):
     """Initialize all directories and virtual environment based on preferences."""
