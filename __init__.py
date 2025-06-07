@@ -10,6 +10,7 @@ import zipfile
 import uuid
 import platform
 import concurrent.futures
+import shutil
 
 bl_info = {
     "name": "Fab to Blender",
@@ -151,26 +152,29 @@ class AssetProcessorPreferences(bpy.types.AddonPreferences):
 
     def draw(self, context):
         layout = self.layout
+
         layout.prop(self, "blender_executable_path")
         layout.prop(self, "asset_data_path")
         layout.prop(self, "system_python")
         if not is_valid_python_path(self.system_python):
             layout.label(text="Set a valid Python executable path!", icon='ERROR')
+
         layout.separator()
         row = layout.row()
-        # thumbnail_size_mb = get_thumbnail_cache_size(context) / (1024 ** 2)
-        row.label(text=f"Thumbnail Cache: {get_thumbnail_cache_size(context):.2f} MB")
-        row.operator("filebrowser.clear_thumbnails", text="Clear Thumbnail Cache", icon='TRASH')
-        row = layout.row()
-        row.label(text=f"JSON Cache: {get_jsonfile_cache_size(context):.2f} MB")
-        row.operator("filebrowser.clear_jsonfiles", text="Clear JSON Cache", icon='TRASH')
-        row = layout.row()
-        row.label(text=f"ZIP file Cache: {get_zipfile_cache_size(context):.2f} MB")
-        row.operator("filebrowser.clear_zipfiles", text="Clear ZIP file Cache", icon='TRASH')
-        layout.separator()
+        row.operator("preferences.update_data_path", icon='FILE_REFRESH')
+        row.operator("preferences.setup_env", icon='FILE_REFRESH')
+
         row = layout.row()
         row.operator("wm.url_open", text="Report a Bug", icon='URL').url = "https://github.com/cgmaterial/fab-to-blender/issues/new"
         row.operator("wm.url_open", text="Support Development", icon='FUND').url = "https://ko-fi.com/cg_material"
+
+        row = layout.row()
+        row.operator("filebrowser.clear_thumbnails",
+                     text=f"{get_thumbnail_cache_size(context):.2f} MB Thumbnail Cache", icon='TRASH')
+        row.operator("filebrowser.clear_jsonfiles",
+                     text=f"{get_jsonfile_cache_size(context):.2f} MB JSON Cache", icon='TRASH')
+        row.operator("filebrowser.clear_zipfiles",
+                     text=f"{get_zipfile_cache_size(context):.2f} MB ZIP file Cache", icon='TRASH')
 
 
 def initialize_paths(context):
@@ -201,13 +205,18 @@ def update_asset_data_path(self, context):
     print("Updated asset data path and reinitialized directories.")
 
 
-def setup_env(context):
+def setup_env(context, reset=False):
     """Set up the virtual environment if it doesn't exist."""
     paths = get_asset_paths(context)
     system_python = context.preferences.addons[__name__].preferences.system_python
     if not is_valid_python_path(system_python):
         print(f"Error: Invalid or unset Python path: {system_python}. Skipping virtual environment setup.")
         return
+
+    if reset and os.path.exists(paths["env_dir"]):
+        print(f"Resetting virtual environment at {paths['env_dir']}")
+        shutil.rmtree(paths["env_dir"], ignore_errors=True)
+
     if not os.path.exists(paths["env_dir"]):
         print(f"Creating virtual environment at {paths['env_dir']}")
         subprocess.check_call([system_python, "-m", "venv", paths["env_dir"]])
@@ -1090,6 +1099,26 @@ class FILEBROWSER_OT_clear_zipfiles(bpy.types.Operator):
         return context.window_manager.invoke_confirm(self, event)
 
 
+class PREFERENCES_OT_update_data_path(bpy.types.Operator):
+    bl_idname = "preferences.update_data_path"
+    bl_label = "Update Asset Data Path"
+
+    def execute(self, context):
+        update_asset_data_path(context.preferences.addons[__name__].preferences, context)
+        self.report({'INFO'}, "Asset data path updated.")
+        return {'FINISHED'}
+
+
+class PREFERENCES_OT_setup_env(bpy.types.Operator):
+    bl_idname = "preferences.setup_env"
+    bl_label = "Setup Environment"
+
+    def execute(self, context):
+        setup_env(context, reset=True)
+        self.report({'INFO'}, "Environment setup complete.")
+        return {'FINISHED'}
+
+
 class FILEBROWSER_OT_set_asset_mode(bpy.types.Operator):
     bl_idname = "filebrowser.set_asset_mode"
     bl_label = "Set Asset Mode"
@@ -1184,6 +1213,8 @@ classes = [
     FILEBROWSER_OT_clear_thumbnails,
     FILEBROWSER_OT_clear_jsonfiles,
     FILEBROWSER_OT_clear_zipfiles,
+    PREFERENCES_OT_update_data_path,
+    PREFERENCES_OT_setup_env,
     FILEBROWSER_OT_set_asset_mode,
     FILEBROWSER_OT_set_asset_type,
     FILEBROWSER_OT_set_import_type,
