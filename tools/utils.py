@@ -34,7 +34,7 @@ headers = {
 querystring = {
     "is_free": "1",
     "seller": "Quixel",
-    "sort_by": "-relevance"
+    "sort_by": "-firstPublishedAt"  # Default sort
 }
 
 
@@ -105,7 +105,7 @@ def smart_square_crop(image_path, border_width=40):
     new_image.save(image_path)
 
 
-def fetch_assets(url, referer, data_dir, asset_type=None, query=None, cursor=None):
+def fetch_assets(url, referer, data_dir, asset_type=None, query=None, cursor=None, sort_method=None):
     headers["Referer"] = referer
     querystring["cursor"] = cursor
     querystring["listing_types"] = asset_type
@@ -115,7 +115,16 @@ def fetch_assets(url, referer, data_dir, asset_type=None, query=None, cursor=Non
         querystring["asset_formats"] = "texture-set"
     querystring["q"] = query
 
-    file_path = os.path.join(data_dir, f"search_{asset_type}_{query}_{cursor}.json")
+    # Map sort_method to the appropriate API sort_by parameter
+    sort_mapping = {
+        'newest': '-firstPublishedAt',
+        'oldest': 'firstPublishedAt',
+        'title_asc': 'title',
+        'title_desc': '-title'
+    }
+    querystring["sort_by"] = sort_mapping.get(sort_method, '-firstPublishedAt')
+
+    file_path = os.path.join(data_dir, f"search_{asset_type}_{query}_{sort_method}_{cursor}.json")
 
     fetcher(url, headers, file_path, query=querystring)
 
@@ -144,10 +153,8 @@ def fetcher(url, header, file_path, query=None):
         try:
             # Make the GET request
             if query:
-                # response = requests.get(url, headers=header, params=query)
                 response = scraper.get(url, headers=headers, params=query)
             else:
-                # response = requests.get(url, headers=header)
                 response = scraper.get(url, headers=headers)
 
             if response.status_code == 200:
@@ -200,7 +207,6 @@ def download_file(url, out_file):
     print("Downloading file...")
     # Create the cloudscraper instance
     scraper = cloudscraper.create_scraper()
-    # response = requests.get(url, stream=True)
     response = scraper.get(url, stream=True)
     response.raise_for_status()
 

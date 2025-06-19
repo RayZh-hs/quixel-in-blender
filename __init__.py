@@ -385,7 +385,8 @@ def update_assets(context, cursor):
         return
     asset_type = str(context.scene.asset_type).strip()
     query = context.scene.asset_search.strip()
-    file_path = os.path.join(paths["json_dir"], f"search_{asset_type}_{query}_{cursor}.json")
+    sort_method = context.scene.sort_method
+    file_path = os.path.join(paths["json_dir"], f"search_{asset_type}_{query}_{sort_method}_{cursor}.json")
 
     if os.path.exists(file_path):
         time_difference = datetime.now() - datetime.fromtimestamp(os.path.getmtime(file_path))
@@ -395,7 +396,7 @@ def update_assets(context, cursor):
         url = "https://www.fab.com/i/listings/search"
         referer = "https://www.fab.com/sellers/Quixel"
         command = [paths["python_path"], utils_path, "--function", "fetch_assets", url, referer, paths["json_dir"],
-                   asset_type, query, cursor]
+                   asset_type, query, cursor, sort_method]
         print(f"Running {command} inside the virtual environment...")
         process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         print(process.communicate()[0])
@@ -767,8 +768,9 @@ class FILEBROWSER_PT_assets(bpy.types.Panel):
             row.operator("filebrowser.set_import_type", text="Add To Assets",
                          depress=context.scene.import_type == 'add_to_asset_library').import_type = 'add_to_asset_library'
             row = box.row(align=True)
-            row.prop(context.scene, "asset_search", text="")
-            row.operator("filebrowser.search_assets", text="", icon='VIEWZOOM')
+            row.prop(context.scene, "asset_search", text="", icon='VIEWZOOM')
+            row.prop(context.scene, "sort_method", text="")
+            # row.operator("filebrowser.search_assets", text="", icon='VIEWZOOM')
             if self.assets:
                 if cancel_loading:
                     print("Loading cancelled.")
@@ -1262,6 +1264,18 @@ def register():
         name="Downloaded Import Method",
         default="import_to_scene"
     )
+    bpy.types.Scene.sort_method = bpy.props.EnumProperty(
+        name="Sort Method",
+        description="Sort assets by different criteria",
+        items=[
+            ('newest', "Newest", "Sort by newest first"),
+            ('oldest', "Oldest", "Sort by oldest first"),
+            ('title_asc', "Title A-Z", "Sort by title alphabetically (A-Z)"),
+            ('title_desc', "Title Z-A", "Sort by title alphabetically (Z-A)"),
+        ],
+        default='newest',
+        update=FILEBROWSER_OT_search_assets.execute
+    )
     FILEBROWSER_PT_assets.assets = {}
     initialize_paths(bpy.context)
     setup_env(bpy.context)
@@ -1277,8 +1291,13 @@ def unregister():
     del bpy.types.Scene.asset_type
     del bpy.types.Scene.import_type
     del bpy.types.Scene.import_size
+    del bpy.types.Scene.downloaded_asset_type
+    del bpy.types.Scene.downloaded_import_size
+    del bpy.types.Scene.downloaded_import_method
+    del bpy.types.Scene.sort_method
     cleanup_preview_collection()
 
 
 if __name__ == "__main__":
     register()
+
