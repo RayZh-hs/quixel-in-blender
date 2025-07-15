@@ -222,7 +222,7 @@ def setup_env(context, reset=False):
         subprocess.check_call([system_python, "-m", "venv", paths["env_dir"]])
         subprocess.check_call([paths["python_path"], "-m", "pip", "install", "--upgrade", "pip"])
         subprocess.check_call(
-            [paths["python_path"], "-m", "pip", "install", "requests", "cloudscraper", "zstandard", "pillow"])
+            [paths["python_path"], "-m", "pip", "install", "requests", "cloudscraper", "zstandard", "pillow", "pycookiecheat"])
 
 
 def add_asset_library(assets_dir):

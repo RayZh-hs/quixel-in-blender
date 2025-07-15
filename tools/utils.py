@@ -1,6 +1,7 @@
 import argparse
 import json
 import os
+import sys
 import time
 from PIL import Image
 import cloudscraper
@@ -8,9 +9,9 @@ import platform
 
 
 if platform.system() == 'Windows':
-    user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:135.0) Gecko/20100101 Firefox/135.0"
+    user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0"
 else:
-    user_agent = "Mozilla/5.0 (X11; Linux x86_64; rv:135.0) Gecko/20100101 Firefox/135.0"
+    user_agent = "Mozilla/5.0 (X11; Linux x86_64; rv:140.0) Gecko/20100101 Firefox/140.0"
 
 headers = {
     "Accept": "application/json, text/plain, */*",
@@ -36,6 +37,22 @@ querystring = {
     "seller": "Quixel",
     "sort_by": "-firstPublishedAt"  # Default sort
 }
+
+
+def get_cookies():
+    try:
+        from pycookiecheat import firefox_cookies, chrome_cookies
+        all_cookies = chrome_cookies("fab.com")
+        if not all_cookies:
+            all_cookies = firefox_cookies("fab.com")
+        if all_cookies:
+            session_id = all_cookies.get("fab_sessionid", "")
+            csrftoken = all_cookies.get("fab_csrftoken", "")
+            cookies = {'fab_sessionid': session_id, 'fab_csrftoken': csrftoken}
+            return cookies
+        return {}
+    except:
+        print(str(sys.exc_info()))
 
 
 def crop_thumbnails(image_path):
@@ -148,14 +165,16 @@ def fetcher(url, header, file_path, query=None):
     retry_delay = 2  # Delay in seconds between retries
     # Create the cloudscraper instance
     scraper = cloudscraper.create_scraper()
+    cookies = get_cookies()
+    print(cookies)
 
     for attempt in range(1, max_retries + 1):
         try:
             # Make the GET request
             if query:
-                response = scraper.get(url, headers=headers, params=query)
+                response = scraper.get(url, headers=headers, params=query, cookies=cookies)
             else:
-                response = scraper.get(url, headers=headers)
+                response = scraper.get(url, headers=headers, cookies=cookies)
 
             if response.status_code == 200:
                 # Success: Process the response

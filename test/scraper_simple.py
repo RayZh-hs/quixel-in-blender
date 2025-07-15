@@ -1,13 +1,15 @@
 import platform
 import cloudscraper
 
-url = "https://www.fab.com/i/listings/search"
-referer = "https://www.fab.com/sellers/Quixel"
+# url = "https://www.fab.com/i/listings/search"
+# referer = "https://www.fab.com/sellers/Quixel"
+url = "https://www.fab.com/i/listings/18e5810e-ca6a-4129-be9a-7dc6fe08bc4d/asset-formats/fbx/files/f95bcdbc-3dea-4604-b67c-244af3c679c4/download-info/binary"
+referer = "https://www.fab.com/i/listings/18e5810e-ca6a-4129-be9a-7dc6fe08bc4d"
 
 if platform.system() == 'Windows':
-    user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:134.0) Gecko/20100101 Firefox/134.0"
+    user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0"
 else:
-    user_agent = "Mozilla/5.0 (X11; Linux x86_64; rv:134.0) Gecko/20100101 Firefox/134.0"
+    user_agent = "Mozilla/5.0 (X11; Linux x86_64; rv:140.0) Gecko/20100101 Firefox/140.0"
 
 headers = {
     "Accept": "application/json, text/plain, */*",
