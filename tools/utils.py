@@ -7,11 +7,11 @@ from PIL import Image
 import cloudscraper
 import platform
 
-
+# Set user agent depending on OS
 if platform.system() == 'Windows':
     user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0"
 else:
-    user_agent = "Mozilla/5.0 (X11; Linux x86_64; rv:140.0) Gecko/20100101 Firefox/140.0"
+    user_agent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36"
 
 headers = {
     "Accept": "application/json, text/plain, */*",
@@ -50,9 +50,9 @@ def get_cookies():
             csrftoken = all_cookies.get("fab_csrftoken", "")
             cookies = {'fab_sessionid': session_id, 'fab_csrftoken': csrftoken}
             return cookies
-        return {}
     except:
         print(str(sys.exc_info()))
+    return {}
 
 
 def crop_thumbnails(image_path):
@@ -164,7 +164,7 @@ def fetcher(url, header, file_path, query=None):
     max_retries = 5  # Number of retries
     retry_delay = 2  # Delay in seconds between retries
     # Create the cloudscraper instance
-    scraper = cloudscraper.create_scraper()
+    scraper = cloudscraper.create_scraper(browser={'custom': headers["User-Agent"]})
     cookies = get_cookies()
     print(cookies)
 
@@ -179,9 +179,7 @@ def fetcher(url, header, file_path, query=None):
             if response.status_code == 200:
                 # Success: Process the response
                 try:
-                    json_response = response.content.decode('utf-8')  # Decode without decompression
-                    json_data = json.loads(json_response)  # Parse the decoded data as JSON
-
+                    json_data = response.json()
                     pretty_json = json.dumps(json_data, indent=2)
 
                     # Save the pretty-printed data to a file
