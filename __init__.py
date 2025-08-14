@@ -922,7 +922,7 @@ class IMPORT_ASSET_OT_import_asset(bpy.types.Operator):
                             tzinfo=timezone.utc)
                         link_expired = datetime.now(timezone.utc) > expires_dt
                     if link_expired:
-                        url = f"https://www.fab.com/i/listings/{self.uid}/asset-formats/{asset_format}/files/{asset_uid}/download-info/binary"
+                        url = f"https://www.fab.com/i/listings/{self.uid}/asset-formats/{asset_format}/files/{asset_uid}/download-info"
                         referer = f"https://www.fab.com/i/listings/{self.uid}"
                         command = [paths["python_path"], utils_path, "--function", "fetch_down_link", url, referer,
                                    paths["json_dir"], asset_uid]
