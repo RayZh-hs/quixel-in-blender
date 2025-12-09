@@ -1,3 +1,7 @@
+## Announcement:
+This addon no longer works. fab/epic changed their api and i could not get this addon to work properly anymore.
+I am archiving this repo. If anyone who knows their way around these things is interested, they can fork and work on this addon.
+Thank you everyone for your support.
 
 ### Disclaimer:
 
