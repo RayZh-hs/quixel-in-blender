@@ -12,6 +12,21 @@ This addon, based on the now archived [Fab to Blender](https://github.com/cgmate
 
 We are actively working on this project, and we welcome contributions from the community. If you have any ideas, suggestions, or improvements, please feel free to submit a pull request or open an issue. Stayed tuned for updates and new features!
 
+### Project layout
+
+```
+__init__.py    add-on entry (bl_info + register/unregister)
+src/           the add-on package: UI, operators, preferences, import, paths/env
+scripts/       standalone scripts run as subprocesses (Fab API client, asset importer)
+images/        bundled placeholder preview
+dev/           developer docs + reference snapshots
+tests/         placeholder for future tests
+```
+
+See [`ARCHITECTURE.md`](ARCHITECTURE.md) for the design — in particular the
+two subprocess boundaries (the venv-isolated Fab API client and the headless-Blender
+asset importer) and the `src/` module map.
+
 ### Disclaimer
 
 Read fab [terms-of-service](https://www.fab.com/terms-of-service)
