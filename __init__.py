@@ -13,11 +13,11 @@ import concurrent.futures
 import shutil
 
 bl_info = {
-    "name": "Fab to Blender",
-    "description": "Browse and import free quixel assets from fab.com",
-    "author": "https://github.com/cgmaterial",
-    "version": (4, 1, 0),
-    "blender": (4, 4, 3),
+    "name": "Quixel in Blender",
+    "description": "Browse and import Megascans and Megaplants assets from the Fab marketplace",
+    "author": "https://github.com/RayZh-hs/",
+    "version": (5, 0, 0),
+    "blender": (4, 4, 0),
     "location": "View3D > Sidebar > Quixel",
     "category": "Asset Management",
 }
@@ -394,7 +394,7 @@ def update_assets(context, cursor):
 
     if not os.path.exists(file_path) or time_difference > timedelta(hours=5):
         url = "https://www.fab.com/i/listings/search"
-        referer = "https://www.fab.com/sellers/Quixel"
+        referer = "https://www.fab.com/sellers/Quixel%20Megascans"
         command = [paths["python_path"], utils_path, "--function", "fetch_assets", url, referer, paths["json_dir"],
                    asset_type, query, cursor, sort_method]
         print(f"Running {command} inside the virtual environment...")
@@ -880,13 +880,18 @@ class IMPORT_ASSET_OT_import_asset(bpy.types.Operator):
 
         if not os.path.exists(asset_formats_file):
             url = f"https://www.fab.com/i/listings/{self.uid}/asset-formats"
-            referer = "https://www.fab.com/sellers/Quixel"
+            referer = f"https://www.fab.com/i/listings/{self.uid}"
             command = [paths["python_path"], utils_path, "--function", "fetch_asset_formats", url, referer,
                        paths["json_dir"], self.uid]
             print(f"Running {command} inside the virtual environment...")
             process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
             print(process.communicate()[0])
 
+        if not os.path.exists(asset_formats_file):
+            self.report({'ERROR'}, "Could not fetch asset formats from fab.com. "
+                                   "Check your connection and that you're logged into fab.com in Chrome or Firefox.")
+            bpy.context.window.cursor_set('DEFAULT')
+            return {'CANCELLED'}
         with open(asset_formats_file, "r") as f:
             data = json.load(f)
         asset_name = None
@@ -929,6 +934,11 @@ class IMPORT_ASSET_OT_import_asset(bpy.types.Operator):
                         print(f"Running {command} inside the virtual environment...")
                         process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
                         print(process.communicate()[0])
+                    if not os.path.exists(down_link_file):
+                        self.report({'ERROR'}, "Could not get a download link. Log into fab.com in Chrome or "
+                                               "Firefox, make sure the asset is in your library, then try again.")
+                        bpy.context.window.cursor_set('DEFAULT')
+                        return {'CANCELLED'}
                     with open(down_link_file, "r") as f:
                         data = json.load(f)
                         down_link = data["downloadInfo"][0]["downloadUrl"]

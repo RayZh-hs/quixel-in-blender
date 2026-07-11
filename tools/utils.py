@@ -15,7 +15,10 @@ else:
 
 headers = {
     "Accept": "application/json, text/plain, */*",
-    "Accept-Encoding": "gzip, deflate, br, zstd",
+    # Only advertise encodings requests can actually decode. The venv ships no
+    # brotli decoder, so advertising "br" makes Cloudflare return brotli-compressed
+    # bodies that come back as undecodable bytes and break response.json().
+    "Accept-Encoding": "gzip, deflate",
     "Accept-Language": "en",
     "Alt-Used": "www.fab.com",
     "Connection": "keep-alive",
@@ -32,26 +35,67 @@ headers = {
     "Sec-CH-UA-Platform": "Windows"
 }
 
+# Fab renamed the Quixel storefront: the old "Quixel" seller slug now returns
+# zero results. Free Megascans assets are published under "Quixel Megascans"
+# (plants live under a separate "Quixel Megaplants" seller, intentionally excluded).
+QUIXEL_SELLER = "Quixel Megascans"
+
 querystring = {
     "is_free": "1",
-    "seller": "Quixel",
+    "seller": QUIXEL_SELLER,
     "sort_by": "-firstPublishedAt"  # Default sort
 }
 
 
+def _linux_chrome_safe_storage_key():
+    """Fetch Chrome's 'Chrome Safe Storage' key by attribute, the way
+    `secret-tool lookup application chrome` does.
+
+    pycookiecheat's default keyring lookup grabs the wrong item on KDE/ksecretd
+    (which exposes several similarly named 'Chrome Safe Storage' entries), so it
+    derives a bad AES key and decryption yields garbage. Resolving the secret
+    ourselves and handing it to chrome_cookies(password=...) sidesteps that.
+    Returns the secret bytes, or None to let pycookiecheat use its default path.
+    """
+    try:
+        import secretstorage
+        conn = secretstorage.dbus_init()
+        collection = secretstorage.get_default_collection(conn)
+        for item in collection.search_items({"application": "chrome"}):
+            return item.get_secret()
+    except Exception:
+        print(str(sys.exc_info()))
+    return None
+
+
 def get_cookies():
+    """Read the user's logged-in fab.com session cookies from their browser."""
     try:
         from pycookiecheat import firefox_cookies, chrome_cookies
-        all_cookies = chrome_cookies("fab.com")
-        if not all_cookies:
-            all_cookies = firefox_cookies("fab.com")
-        if all_cookies:
-            session_id = all_cookies.get("fab_sessionid", "")
-            csrftoken = all_cookies.get("fab_csrftoken", "")
-            cookies = {'fab_sessionid': session_id, 'fab_csrftoken': csrftoken}
-            return cookies
-    except:
+    except Exception:
         print(str(sys.exc_info()))
+        return {}
+
+    all_cookies = {}
+    # Chrome first. On Linux, pass the key explicitly so KDE keyring ambiguity
+    # (and modern Chrome's v11 / db-v24 cookie encryption) doesn't break us.
+    try:
+        password = _linux_chrome_safe_storage_key() if platform.system() == "Linux" else None
+        all_cookies = chrome_cookies("https://www.fab.com", password=password) or {}
+    except Exception:
+        print(str(sys.exc_info()))
+
+    # Fall back to Firefox if Chrome yielded no session.
+    if not all_cookies.get("fab_sessionid"):
+        try:
+            all_cookies = firefox_cookies("https://www.fab.com") or all_cookies
+        except Exception:
+            print(str(sys.exc_info()))
+
+    session_id = all_cookies.get("fab_sessionid", "")
+    csrftoken = all_cookies.get("fab_csrftoken", "")
+    if session_id or csrftoken:
+        return {'fab_sessionid': session_id, 'fab_csrftoken': csrftoken}
     return {}
 
 
@@ -193,7 +237,19 @@ def fetcher(url, header, file_path, query=None):
                     return  # Exit the function if content is invalid
 
             elif response.status_code == 403:
-                # Forbidden: Log and retry
+                # A 403 is either a transient Cloudflare block (worth retrying) or a hard
+                # auth error like {"detail": "Must be logged in to download ..."}. The latter
+                # will never succeed on retry, so bail out early with a clear message instead
+                # of burning through all the attempts and leaving no output file behind.
+                detail = ""
+                try:
+                    detail = response.json().get("detail", "")
+                except Exception:
+                    pass
+                if detail:
+                    print(f"AUTH ERROR: {detail} — log into fab.com in Chrome or Firefox "
+                          f"so the addon can read your session cookies.")
+                    return
                 print(f"Attempt {attempt}: Received 403 Forbidden. Retrying in {retry_delay} seconds...")
                 time.sleep(retry_delay)
                 continue
