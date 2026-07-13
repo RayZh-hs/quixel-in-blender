@@ -38,6 +38,9 @@ ADDON_DIR = os.path.dirname(os.path.dirname(__file__))
 SCRIPTS_DIR = os.path.join(ADDON_DIR, "scripts")
 FAB_API_SCRIPT = os.path.join(SCRIPTS_DIR, "fab_api.py")
 ASSET_IMPORTER_SCRIPT = os.path.join(SCRIPTS_DIR, "asset_importer.py")
+# Builds the shared placeholder library .blend from a search manifest. Run via the
+# running Blender itself (bpy.app.binary_path) so the saved .blend version matches.
+PLACEHOLDER_BUILDER_SCRIPT = os.path.join(SCRIPTS_DIR, "placeholder_builder.py")
 
 # Placeholder thumbnail shown before a real preview is downloaded.
 PREVIEW_IMG = os.path.join(ADDON_DIR, "images", "preview.svg")

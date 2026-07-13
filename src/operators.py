@@ -1,42 +1,33 @@
 """All addon operators.
 
-Grouped here: the two import operators (online asset and already-downloaded
-asset), the search / load-more / mode-and-filter toggles that drive the panel, the
-cache-clearing operators, and the two preference operators (update data path, setup
-env). UI toggles simply write ``context.scene.*`` properties; the heavier operators
-delegate to :mod:`.assets`, :mod:`.importer` and :mod:`.paths`.
+Grouped here: the online import operator (kept as a thin wrapper / fallback around
+:func:`assets.download_and_build_asset`), the search / load-more actions that drive the
+online pipeline, the search-parameter toggles the sidebar writes, the "open asset
+browser" convenience, the cache-clearing operators, and the two preference operators.
 
-Shared runtime state (queue, threads, cancel flag, preview collection, the visible
-``assets`` dict) is mutated through :mod:`.state`.
+Shared runtime state (threads, cancel flag, cursors, manifest) is mutated through
+:mod:`.state`.
 
-Depends on :mod:`.constants`, :mod:`.state`, :mod:`.paths`, :mod:`.assets` and
-:mod:`.importer`.
+Depends on :mod:`.constants`, :mod:`.state`, :mod:`.paths` and :mod:`.assets`.
 """
-
-import json
-import os
-import subprocess
-import threading
-from datetime import datetime, timezone
 
 import bpy
 
 from . import state
-from .constants import ADDON_ID, ASSET_IMPORTER_SCRIPT, FAB_API_SCRIPT
+from .constants import ADDON_ID, ASSET_LIB_NAME
 from .paths import (
     clear_jsonfile_cache,
     clear_thumbnail_cache,
     clear_zipfile_cache,
-    get_asset_paths,
-    is_valid_python_path,
     setup_env,
     update_asset_data_path,
 )
-from .assets import add_downloaded_asset, update_assets
-from .importer import import_to_scene, update_ui_with_progress
+from .assets import download_and_build_asset, update_assets
 
 
 class IMPORT_ASSET_OT_import_asset(bpy.types.Operator):
+    """Download and import an online asset directly (fallback to dragging from the
+    Asset Browser)."""
     bl_idname = "import_asset.import"
     bl_label = "Import Asset"
     asset_name: bpy.props.StringProperty()
@@ -44,162 +35,87 @@ class IMPORT_ASSET_OT_import_asset(bpy.types.Operator):
     img_path: bpy.props.StringProperty()
 
     def execute(self, context):
-        bpy.context.window.cursor_set('WAIT')
-        print(f"Importing Asset: {self.asset_name}")
-        print(f"UID: {self.uid}")
-        print(f"Image Path: {self.img_path if self.img_path else 'No Image Available'}")
-        paths = get_asset_paths(context)
-        if not is_valid_python_path(context.preferences.addons[ADDON_ID].preferences.system_python):
-            self.report({'ERROR'}, "Invalid or unset Python path. Please set a valid Python executable in preferences.")
-            bpy.context.window.cursor_set('DEFAULT')
-            return {'CANCELLED'}
+        context.window.cursor_set('WAIT')
+        print(f"Importing Asset: {self.asset_name} (UID: {self.uid})")
         asset_type = str(context.scene.asset_type).strip()
-        asset_formats_file = os.path.join(paths["json_dir"], f"asset_{self.uid}.json")
-
-        if not os.path.exists(asset_formats_file):
-            url = f"https://www.fab.com/i/listings/{self.uid}/asset-formats"
-            referer = f"https://www.fab.com/i/listings/{self.uid}"
-            command = [paths["python_path"], FAB_API_SCRIPT, "--function", "fetch_asset_formats", url, referer,
-                       paths["json_dir"], self.uid]
-            print(f"Running {command} inside the virtual environment...")
-            process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-            print(process.communicate()[0])
-
-        if not os.path.exists(asset_formats_file):
-            self.report({'ERROR'}, "Could not fetch asset formats from fab.com. "
-                                   "Check your connection and that you're logged into fab.com in Chrome or Firefox.")
-            bpy.context.window.cursor_set('DEFAULT')
+        size = int(context.scene.import_size.strip())
+        status, message = download_and_build_asset(
+            context, self.uid, asset_type, size, context.scene.import_type,
+            display_name=self.asset_name, img_path=self.img_path if self.img_path else None)
+        context.window.cursor_set('DEFAULT')
+        if status != 0:
+            self.report({'ERROR'}, message)
             return {'CANCELLED'}
-        with open(asset_formats_file, "r") as f:
-            data = json.load(f)
-        asset_name = None
-        asset_uid = None
-        asset_format = {'3d-model': 'fbx', 'material': 'texture-set', 'decal': 'texture-set'}.get(asset_type)
-        if asset_format:
-            import_size = int(context.scene.import_size.strip())
-            for asset in data:
-                if asset["assetFormatType"]["code"] == asset_format:
-                    while import_size >= 0:
-                        try:
-                            asset_name = asset["files"][import_size]["name"]
-                            break
-                        except IndexError:
-                            import_size -= 1
-                    asset_uid = asset["files"][import_size]["uid"]
-            print(f"UID for {asset_format}: {asset_uid}")
-            if not asset_uid:
-                self.report({'ERROR'}, f"{asset_format} not found")
-                bpy.context.window.cursor_set('DEFAULT')
-                return {'CANCELLED'}
-            asset_path = os.path.join(paths["assets_dir"], asset_name)
-            extract_name = os.path.splitext(asset_name)[0]
-            extract_path = os.path.join(paths["unzipped_assets_dir"], extract_name)
-            if not os.path.exists(extract_path):
-                if not os.path.exists(asset_path):
-                    down_link_file = os.path.join(paths["json_dir"], f"downlink_{asset_uid}.json")
-                    link_expired = True
-                    if os.path.exists(down_link_file):
-                        with open(down_link_file, "r") as f:
-                            data = json.load(f)
-                        expires_dt = datetime.fromisoformat(data["downloadInfo"][0]["expires"].rstrip("Z")).replace(
-                            tzinfo=timezone.utc)
-                        link_expired = datetime.now(timezone.utc) > expires_dt
-                    if link_expired:
-                        url = f"https://www.fab.com/i/listings/{self.uid}/asset-formats/{asset_format}/files/{asset_uid}/download-info"
-                        referer = f"https://www.fab.com/i/listings/{self.uid}"
-                        command = [paths["python_path"], FAB_API_SCRIPT, "--function", "fetch_down_link", url, referer,
-                                   paths["json_dir"], asset_uid]
-                        print(f"Running {command} inside the virtual environment...")
-                        process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-                        print(process.communicate()[0])
-                    if not os.path.exists(down_link_file):
-                        self.report({'ERROR'}, "Could not get a download link. Log into fab.com in Chrome or "
-                                               "Firefox, make sure the asset is in your library, then try again.")
-                        bpy.context.window.cursor_set('DEFAULT')
-                        return {'CANCELLED'}
-                    with open(down_link_file, "r") as f:
-                        data = json.load(f)
-                        down_link = data["downloadInfo"][0]["downloadUrl"]
-                    command = [paths["python_path"], FAB_API_SCRIPT, "--function", "download_file", down_link, asset_path]
-                    print(f"Running {command} inside the virtual environment...")
-                    process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-                    progress_thread = threading.Thread(target=update_ui_with_progress, args=(process,))
-                    progress_thread.start()
-                    progress_thread.join()
-                    print('\n')
-                else:
-                    print(f"ZIP file already exists: {asset_path}")
-            else:
-                print(f"Unzipped folder already exists: {extract_path}")
-
-            add_downloaded_asset(context, asset_uid, self.asset_name, asset_type, asset_path, import_size,
-                                 self.img_path)
-            if context.scene.import_type == "import_to_scene":
-                import_result = import_to_scene(context, asset_name, asset_path, asset_type)
-                if import_result != 0:
-                    self.report({'INFO'}, "Asset Import Failed")
-                    return {'FINISHED'}
-            elif context.scene.import_type == "add_to_asset_library":
-                prefs = context.preferences.addons[ADDON_ID].preferences
-                blender_path = prefs.blender_executable_path
-                if not blender_path or not os.path.isfile(blender_path):
-                    self.report({"ERROR"}, "Invalid Blender executable path!")
-                    return {'CANCELLED'}
-                command = [blender_path, "-b", "--factory-startup", "-P", ASSET_IMPORTER_SCRIPT, "--",
-                           paths["assets_dir"], asset_name, asset_path, asset_type, self.img_path]
-                process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-                com = process.communicate()[0]
-                if process.returncode != 0:
-                    print("Error Importing and Marking Asset")
-                else:
-                    print(str(com))
-                    for area in bpy.context.screen.areas:
-                        if area.type == 'FILE_BROWSER':
-                            with bpy.context.temp_override(area=area):
-                                bpy.ops.asset.library_refresh()
-                            break
-        bpy.context.window.cursor_set('DEFAULT')
-        self.report({'INFO'}, "Asset Imported")
+        self.report({'INFO'}, message)
         return {'FINISHED'}
 
 
-class IMPORT_DOWNLOADED_ASSET_OT_import(bpy.types.Operator):
-    bl_idname = "import_downloaded_asset.import"
-    bl_label = "Import Downloaded Asset"
-    asset_uid: bpy.props.StringProperty()
-    asset_name: bpy.props.StringProperty()
-    asset_type: bpy.props.StringProperty()
-    asset_path: bpy.props.StringProperty()
-    thumbnail_path: bpy.props.StringProperty()
-    import_method: bpy.props.StringProperty()
+class QIB_OT_open_asset_browser(bpy.types.Operator):
+    """Split the current editor and show the Quixel library in an Asset Browser on the
+    left, leaving the existing viewport (and its Quixel sidebar) in place on the right."""
+    bl_idname = "quixel.open_asset_browser"
+    bl_label = "Open Quixel Asset Browser"
+
+    @staticmethod
+    def _find_asset_browser():
+        """Return ``(window, area)`` of the first open Quixel Asset Browser, or
+        ``(None, None)``. Searches every window, not just the active screen."""
+        for win in bpy.context.window_manager.windows:
+            for a in win.screen.areas:
+                if a.type == 'FILE_BROWSER' and a.ui_type == 'ASSETS':
+                    return win, a
+        return None, None
 
     def execute(self, context):
-        paths = get_asset_paths(context)
-        if self.import_method == "import_to_scene":
-            import_result = import_to_scene(context, self.asset_name, self.asset_path, self.asset_type)
-            if import_result != 0:
-                self.report({'INFO'}, "Asset Import Failed")
-                return {'FINISHED'}
-        elif self.import_method == "add_to_asset_library":
-            prefs = context.preferences.addons[ADDON_ID].preferences
-            blender_path = prefs.blender_executable_path
-            if not blender_path or not os.path.isfile(blender_path):
-                self.report({"ERROR"}, "Invalid Blender executable path!")
+        win, area = self._find_asset_browser()
+        if area is None:
+            win = context.window
+            # Split the biggest editor vertically and make the LEFT half the browser,
+            # so the original viewport (and the N-panel Quixel sidebar) survive on the
+            # right. Splitting keeps everything inside the current window/workspace.
+            target = max(win.screen.areas, key=lambda a: a.width * a.height)
+            before = set(win.screen.areas)
+            region = next((r for r in target.regions if r.type == 'WINDOW'), None)
+            with context.temp_override(window=win, area=target, region=region):
+                bpy.ops.screen.area_split(direction='VERTICAL', factor=0.35)
+            new_areas = [a for a in win.screen.areas if a not in before]
+            if not new_areas:
+                self.report({'ERROR'}, "Could not split the editor for the Asset Browser.")
                 return {'CANCELLED'}
-            command = [blender_path, "-b", "--factory-startup", "-P", ASSET_IMPORTER_SCRIPT, "--", paths["assets_dir"],
-                       self.asset_name, self.asset_path, self.asset_type, self.thumbnail_path]
-            process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-            com = process.communicate()[0]
-            if process.returncode != 0:
-                print("Error Importing and Marking Asset")
-            else:
-                print(str(com))
-                for area in bpy.context.screen.areas:
-                    if area.type == 'FILE_BROWSER':
-                        with bpy.context.temp_override(area=area):
-                            bpy.ops.asset.library_refresh()
-                        break
-        self.report({'INFO'}, "Asset Imported")
+            # area_split leaves `target` as one half and adds the other; the browser
+            # goes in whichever half is leftmost (smallest x).
+            area = min((target, new_areas[0]), key=lambda a: a.x)
+            area.type = 'FILE_BROWSER'
+            area.ui_type = 'ASSETS'
+
+        # Selecting the library and refreshing must wait until the browser's `params`
+        # exist (created lazily on the first redraw). Assigning `asset_library_reference`
+        # can also no-op if the enum's items aren't populated yet, so verify the value
+        # actually took and retry until it does, then refresh.
+        attempts = [0]
+
+        def _apply():
+            w, a = self._find_asset_browser()
+            if a is None:
+                return None
+            params = getattr(a.spaces.active, "params", None)
+            if params is not None:
+                try:
+                    params.asset_library_reference = ASSET_LIB_NAME
+                except TypeError:
+                    pass  # enum items not built yet; retry below
+            ready = params is not None and params.asset_library_reference == ASSET_LIB_NAME
+            if not ready:
+                attempts[0] += 1
+                if attempts[0] > 40:  # ~2s; give up but say so rather than fail silently
+                    print(f"[quixel] Could not select the '{ASSET_LIB_NAME}' asset library.")
+                    return None
+                return 0.05  # retry until it sticks
+            with bpy.context.temp_override(window=w, area=a):
+                bpy.ops.asset.library_refresh()
+            return None
+
+        bpy.app.timers.register(_apply, first_interval=0.0)
         return {'FINISHED'}
 
 
@@ -213,17 +129,15 @@ class FILEBROWSER_OT_search_assets(bpy.types.Operator):
             state.loading_thread.join()
             print("Stopping existing loading thread...")
         state.cancel_loading = False
-        with state.asset_queue.mutex:
-            state.asset_queue.queue.clear()
-        if state.preview_collection:
-            state.preview_collection.clear()
-        state.assets = {}
-        cursor = "0"
-        update_assets(context, cursor)
-        try:
-            self.report({'INFO'}, "Loading Assets List")
-        except:
-            pass
+        # Fresh search: clear the accumulated placeholder manifest and reset paging.
+        state.manifest.clear()
+        state.cursors["curr_cursor"] = "0"
+        state.cursors["next_cursor"] = "0"
+        error = update_assets(context, "0")
+        if error:
+            self.report({'ERROR'}, error)
+            return {'CANCELLED'}
+        self.report({'INFO'}, "Loading assets… results will appear in the Asset Browser.")
         return {'FINISHED'}
 
 
@@ -238,8 +152,11 @@ class FILEBROWSER_OT_load_more(bpy.types.Operator):
         state.cancel_loading = False
         if state.cursors["next_cursor"] is not None:
             state.cursors["curr_cursor"] = state.cursors["next_cursor"]
+            error = update_assets(context, state.cursors["curr_cursor"])
+            if error:
+                self.report({'ERROR'}, error)
+                return {'CANCELLED'}
             self.report({'INFO'}, "Loading more assets")
-            update_assets(context, state.cursors["curr_cursor"])
         else:
             self.report({'INFO'}, "No more assets to load")
         return {'FINISHED'}
@@ -307,30 +224,6 @@ class PREFERENCES_OT_setup_env(bpy.types.Operator):
         return {'FINISHED'}
 
 
-class FILEBROWSER_OT_set_asset_mode(bpy.types.Operator):
-    bl_idname = "filebrowser.set_asset_mode"
-    bl_label = "Set Asset Mode"
-    asset_mode: bpy.props.StringProperty()
-
-    def execute(self, context):
-        if self.asset_mode == "downloaded":
-            state.cancel_loading = True
-            if state.loading_thread and state.loading_thread.is_alive():
-                state.loading_thread.join()
-                print("Stopping existing loading thread...")
-            state.cancel_loading = False
-            with state.asset_queue.mutex:
-                state.asset_queue.queue.clear()
-            if state.preview_collection:
-                state.preview_collection.clear()
-            state.assets = {}
-            context.scene.asset_mode = self.asset_mode
-        elif self.asset_mode == "online":
-            context.scene.asset_mode = self.asset_mode
-            bpy.ops.filebrowser.search_assets()
-        return {'FINISHED'}
-
-
 class FILEBROWSER_OT_set_asset_type(bpy.types.Operator):
     bl_idname = "filebrowser.set_asset_type"
     bl_label = "Set Asset Type"
@@ -359,34 +252,4 @@ class FILEBROWSER_OT_set_import_size(bpy.types.Operator):
 
     def execute(self, context):
         context.scene.import_size = self.import_size
-        return {'FINISHED'}
-
-
-class FILEBROWSER_OT_set_downloaded_asset_type(bpy.types.Operator):
-    bl_idname = "filebrowser.set_downloaded_asset_type"
-    bl_label = "Set Downloaded Asset Type"
-    asset_type: bpy.props.StringProperty()
-
-    def execute(self, context):
-        context.scene.downloaded_asset_type = self.asset_type
-        return {'FINISHED'}
-
-
-class FILEBROWSER_OT_set_downloaded_import_size(bpy.types.Operator):
-    bl_idname = "filebrowser.set_downloaded_import_size"
-    bl_label = "Set Downloaded Import Size"
-    import_size: bpy.props.StringProperty()
-
-    def execute(self, context):
-        context.scene.downloaded_import_size = self.import_size
-        return {'FINISHED'}
-
-
-class FILEBROWSER_OT_set_downloaded_import_method(bpy.types.Operator):
-    bl_idname = "filebrowser.set_downloaded_import_method"
-    bl_label = "Set Downloaded Import Method"
-    import_method: bpy.props.StringProperty()
-
-    def execute(self, context):
-        context.scene.downloaded_import_method = self.import_method
         return {'FINISHED'}

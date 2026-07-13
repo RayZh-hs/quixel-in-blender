@@ -31,6 +31,11 @@ def get_asset_paths(context):
     json_dir = os.path.join(data_dir, "json_files")
     unzipped_assets_dir = os.path.join(assets_dir, "unzipped_assets")
     blender_files_dir = os.path.join(assets_dir, "blender_files")
+    # Placeholder library lives *inside* assets_dir so the already-registered
+    # "Quixel Assets" library picks it up with no second registration.
+    placeholders_dir = os.path.join(assets_dir, "placeholders")
+    placeholders_blend = os.path.join(placeholders_dir, "placeholders.blend")
+    placeholder_manifest = os.path.join(json_dir, "placeholder_manifest.json")
     catalog_file = os.path.join(assets_dir, "blender_assets.cats.txt")
     downloaded_assets_file = os.path.join(assets_dir, "downloaded_assets.json")
     return {
@@ -42,6 +47,9 @@ def get_asset_paths(context):
         "json_dir": json_dir,
         "unzipped_assets_dir": unzipped_assets_dir,
         "blender_files_dir": blender_files_dir,
+        "placeholders_dir": placeholders_dir,
+        "placeholders_blend": placeholders_blend,
+        "placeholder_manifest": placeholder_manifest,
         "catalog_file": catalog_file,
         "downloaded_assets_file": downloaded_assets_file
     }
@@ -100,7 +108,7 @@ def initialize_paths(context):
     # Create directories
     for path in [paths["data_dir"], paths["thumbnail_dir"],
                  paths["assets_dir"], paths["json_dir"], paths["unzipped_assets_dir"],
-                 paths["blender_files_dir"]]:
+                 paths["blender_files_dir"], paths["placeholders_dir"]]:
         os.makedirs(path, exist_ok=True)
 
     # Initialize catalog file if it doesn't exist

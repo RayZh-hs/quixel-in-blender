@@ -19,10 +19,6 @@ def register_properties():
         name="Search Assets",
         update=FILEBROWSER_OT_search_assets.execute
     )
-    bpy.types.Scene.asset_mode = bpy.props.StringProperty(
-        name="Asset Mode",
-        default='online'
-    )
     bpy.types.Scene.asset_type = bpy.props.StringProperty(
         name="Asset Type",
         default='3d-model'
@@ -34,18 +30,6 @@ def register_properties():
     bpy.types.Scene.import_size = bpy.props.StringProperty(
         name="Import Size",
         default='2'
-    )
-    bpy.types.Scene.downloaded_asset_type = bpy.props.StringProperty(
-        name="Downloaded Asset Type",
-        default="3d-model"
-    )
-    bpy.types.Scene.downloaded_import_size = bpy.props.StringProperty(
-        name="Downloaded Import Size",
-        default="2"
-    )
-    bpy.types.Scene.downloaded_import_method = bpy.props.StringProperty(
-        name="Downloaded Import Method",
-        default="import_to_scene"
     )
     bpy.types.Scene.sort_method = bpy.props.EnumProperty(
         name="Sort Method",
@@ -63,11 +47,7 @@ def register_properties():
 
 def unregister_properties():
     del bpy.types.Scene.asset_search
-    del bpy.types.Scene.asset_mode
     del bpy.types.Scene.asset_type
     del bpy.types.Scene.import_type
     del bpy.types.Scene.import_size
-    del bpy.types.Scene.downloaded_asset_type
-    del bpy.types.Scene.downloaded_import_size
-    del bpy.types.Scene.downloaded_import_method
     del bpy.types.Scene.sort_method
